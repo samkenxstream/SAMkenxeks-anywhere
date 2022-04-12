@@ -93,7 +93,7 @@ func getActiveController(ctx context.Context, kubectl *executables.Kubectl, kube
 
 func newDependencies(ctx context.Context) (*dependencies.Dependencies, error) {
 	return dependencies.NewFactory().
-		WithExecutableImage(executables.DefaultEksaImage()).
+		WithExecutableImage().
 		WithExecutableBuilder().
 		WithKubectl().
 		Build(ctx)
