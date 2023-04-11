@@ -1,14 +1,12 @@
 package features
 
+// These are environment variables used as flags to enable/disable features.
 const (
-	TinkerbellProviderEnvVar        = "TINKERBELL_PROVIDER"
-	TinkebellStackSetupEnvVar       = "TINKERBELL_ENABLE_STACK_CREATION"
-	CloudStackProviderEnvVar        = "CLOUDSTACK_PROVIDER"
 	CloudStackKubeVipDisabledEnvVar = "CLOUDSTACK_KUBE_VIP_DISABLED"
-	SnowProviderEnvVar              = "SNOW_PROVIDER"
 	FullLifecycleAPIEnvVar          = "FULL_LIFECYCLE_API"
 	FullLifecycleGate               = "FullLifecycleAPI"
-	CuratedPackagesEnvVar           = "CURATED_PACKAGES_SUPPORT"
+	CheckpointEnabledEnvVar         = "CHECKPOINT_ENABLED"
+	UseNewWorkflowsEnvVar           = "USE_NEW_WORKFLOWS"
 )
 
 func FeedGates(featureGates []string) {
@@ -24,7 +22,7 @@ func IsActive(feature Feature) bool {
 	return feature.IsActive()
 }
 
-// ClearCache is mainly used for unit tests as of now
+// ClearCache is mainly used for unit tests as of now.
 func ClearCache() {
 	globalFeatures.clearCache()
 }
@@ -36,27 +34,6 @@ func FullLifecycleAPI() Feature {
 	}
 }
 
-func TinkerbellProvider() Feature {
-	return Feature{
-		Name:     "Tinkerbell provider support",
-		IsActive: globalFeatures.isActiveForEnvVar(TinkerbellProviderEnvVar),
-	}
-}
-
-func TinkerbellStackSetup() Feature {
-	return Feature{
-		Name:     "Tinkerbell stack creation support",
-		IsActive: globalFeatures.isActiveForEnvVar(TinkebellStackSetupEnvVar),
-	}
-}
-
-func CloudStackProvider() Feature {
-	return Feature{
-		Name:     "CloudStack provider support",
-		IsActive: globalFeatures.isActiveForEnvVar(CloudStackProviderEnvVar),
-	}
-}
-
 func CloudStackKubeVipDisabled() Feature {
 	return Feature{
 		Name:     "Kube-vip support disabled in CloudStack provider",
@@ -64,16 +41,16 @@ func CloudStackKubeVipDisabled() Feature {
 	}
 }
 
-func SnowProvider() Feature {
+func CheckpointEnabled() Feature {
 	return Feature{
-		Name:     "Snow provider support",
-		IsActive: globalFeatures.isActiveForEnvVar(SnowProviderEnvVar),
+		Name:     "Checkpoint to rerun commands enabled",
+		IsActive: globalFeatures.isActiveForEnvVar(CheckpointEnabledEnvVar),
 	}
 }
 
-func CuratedPackagesSupport() Feature {
+func UseNewWorkflows() Feature {
 	return Feature{
-		Name:     "Curated Packages Support",
-		IsActive: globalFeatures.isActiveForEnvVar(CuratedPackagesEnvVar),
+		Name:     "Use new workflow logic for cluster management operations",
+		IsActive: globalFeatures.isActiveForEnvVar(UseNewWorkflowsEnvVar),
 	}
 }

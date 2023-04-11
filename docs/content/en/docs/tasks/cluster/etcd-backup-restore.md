@@ -3,9 +3,14 @@ title: "Etcd Backup and Restore"
 linkTitle: "Etcd Backup and Restore"
 weight: 11
 date: 2021-11-04
+description: >
+  How to backup and restore an EKS Anywhere cluster
 ---
 
-This page contains steps for backing up a cluster by taking an etcd snapshot, and restoring the cluster from a snapshot. These steps are for an EKS Anywhere cluster provisioned using the external etcd topology (selected by default) and Ubuntu OVAs.
+>**_NOTE_**: External etcd topology is supported for vSphere, CloudStack and Snow clusters, but not yet for Bare Metal or Nutanix clusters.
+>
+
+This page contains steps for backing up a cluster by taking an etcd snapshot, and restoring the cluster from a snapshot. These steps are for an EKS Anywhere cluster provisioned using the external etcd topology (selected by default) with Ubuntu OS.
 
 ### Use case
 

@@ -9,11 +9,24 @@ rules:
     - controlplane.cluster.x-k8s.io
     - anywhere.eks.amazonaws.com
     - packages.eks.amazonaws.com
+    - tinkerbell.org
     resources:
     - '*'
     verbs:
     - get
     - list
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+    verbs:
+      - get
+      - list
+  - nonResourceURLs:
+      - /
+    verbs:
+      - get
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

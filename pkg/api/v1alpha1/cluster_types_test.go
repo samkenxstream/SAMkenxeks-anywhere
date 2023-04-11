@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/aws/eks-anywhere/pkg/api/v1alpha1"
+	"github.com/aws/eks-anywhere/pkg/utils/ptr"
 )
 
 func TestClusterMachineConfigRefs(t *testing.T) {
@@ -26,21 +27,21 @@ func TestClusterMachineConfigRefs(t *testing.T) {
 			},
 			WorkerNodeGroupConfigurations: []v1alpha1.WorkerNodeGroupConfiguration{
 				{
-					Count: 3,
+					Count: ptr.Int(3),
 					MachineGroupRef: &v1alpha1.Ref{
 						Kind: v1alpha1.VSphereMachineConfigKind,
 						Name: "eksa-unit-test-1",
 					},
 				},
 				{
-					Count: 3,
+					Count: ptr.Int(3),
 					MachineGroupRef: &v1alpha1.Ref{
 						Kind: v1alpha1.VSphereMachineConfigKind,
 						Name: "eksa-unit-test-2",
 					},
 				},
 				{
-					Count: 5,
+					Count: ptr.Int(5),
 					MachineGroupRef: &v1alpha1.Ref{
 						Kind: v1alpha1.VSphereMachineConfigKind,
 						Name: "eksa-unit-test", // This tests duplicates
@@ -319,7 +320,7 @@ func TestClusterEqualWorkerNodeGroupConfigurations(t *testing.T) {
 			testName: "one empty, one exists",
 			cluster1Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
 				{
-					Count: 1,
+					Count: ptr.Int(1),
 				},
 			},
 			want: false,
@@ -328,7 +329,7 @@ func TestClusterEqualWorkerNodeGroupConfigurations(t *testing.T) {
 			testName: "both exist, same",
 			cluster1Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
 				{
-					Count: 1,
+					Count: ptr.Int(1),
 					MachineGroupRef: &v1alpha1.Ref{
 						Kind: "k",
 						Name: "n",
@@ -337,7 +338,7 @@ func TestClusterEqualWorkerNodeGroupConfigurations(t *testing.T) {
 			},
 			cluster2Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
 				{
-					Count: 1,
+					Count: ptr.Int(1),
 					MachineGroupRef: &v1alpha1.Ref{
 						Kind: "k",
 						Name: "n",
@@ -350,14 +351,14 @@ func TestClusterEqualWorkerNodeGroupConfigurations(t *testing.T) {
 			testName: "both exist, order diff",
 			cluster1Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
 				{
-					Count: 1,
+					Count: ptr.Int(1),
 					MachineGroupRef: &v1alpha1.Ref{
 						Kind: "k1",
 						Name: "n1",
 					},
 				},
 				{
-					Count: 2,
+					Count: ptr.Int(2),
 					MachineGroupRef: &v1alpha1.Ref{
 						Kind: "k2",
 						Name: "n2",
@@ -366,14 +367,14 @@ func TestClusterEqualWorkerNodeGroupConfigurations(t *testing.T) {
 			},
 			cluster2Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
 				{
-					Count: 2,
+					Count: ptr.Int(2),
 					MachineGroupRef: &v1alpha1.Ref{
 						Kind: "k2",
 						Name: "n2",
 					},
 				},
 				{
-					Count: 1,
+					Count: ptr.Int(1),
 					MachineGroupRef: &v1alpha1.Ref{
 						Kind: "k1",
 						Name: "n1",
@@ -386,12 +387,69 @@ func TestClusterEqualWorkerNodeGroupConfigurations(t *testing.T) {
 			testName: "both exist, count diff",
 			cluster1Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
 				{
-					Count: 1,
+					Count: ptr.Int(1),
 				},
 			},
 			cluster2Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
 				{
-					Count: 2,
+					Count: ptr.Int(2),
+				},
+			},
+			want: false,
+		},
+		{
+			testName: "both exist, autoscaling config diff",
+			cluster1Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
+				{
+					AutoScalingConfiguration: &v1alpha1.AutoScalingConfiguration{
+						MinCount: 1,
+						MaxCount: 3,
+					},
+				},
+			},
+			cluster2Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
+				{
+					AutoScalingConfiguration: nil,
+				},
+			},
+			want: false,
+		},
+		{
+			testName: "both exist, autoscaling config min diff",
+			cluster1Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
+				{
+					AutoScalingConfiguration: &v1alpha1.AutoScalingConfiguration{
+						MinCount: 1,
+						MaxCount: 3,
+					},
+				},
+			},
+			cluster2Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
+				{
+					AutoScalingConfiguration: &v1alpha1.AutoScalingConfiguration{
+						MinCount: 2,
+						MaxCount: 3,
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			testName: "both exist, autoscaling config max diff",
+			cluster1Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
+				{
+					AutoScalingConfiguration: &v1alpha1.AutoScalingConfiguration{
+						MinCount: 1,
+						MaxCount: 2,
+					},
+				},
+			},
+			cluster2Wngs: []v1alpha1.WorkerNodeGroupConfiguration{
+				{
+					AutoScalingConfiguration: &v1alpha1.AutoScalingConfiguration{
+						MinCount: 1,
+						MaxCount: 3,
+					},
 				},
 			},
 			want: false,
@@ -832,6 +890,18 @@ func TestClusterEqualClusterNetwork(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			testName: "diff Nodes",
+			cluster1ClusterNetwork: v1alpha1.ClusterNetwork{
+				Nodes: &v1alpha1.Nodes{},
+			},
+			cluster2ClusterNetwork: v1alpha1.ClusterNetwork{
+				Nodes: &v1alpha1.Nodes{
+					CIDRMaskSize: ptr.Int(3),
+				},
+			},
+			want: false,
+		},
 	}
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -1036,15 +1106,27 @@ func TestClusterEqualRegistryMirrorConfiguration(t *testing.T) {
 			cluster1Regi: &v1alpha1.RegistryMirrorConfiguration{
 				Endpoint:      "1.2.3.4",
 				CACertContent: "ca",
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "eks-anywhere",
+					},
+				},
 			},
 			cluster2Regi: &v1alpha1.RegistryMirrorConfiguration{
 				Endpoint:      "1.2.3.4",
 				CACertContent: "ca",
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "eks-anywhere",
+					},
+				},
 			},
 			want: true,
 		},
 		{
-			testName: "both exist, diff",
+			testName: "both exist, endpoint diff",
 			cluster1Regi: &v1alpha1.RegistryMirrorConfiguration{
 				Endpoint:      "1.2.3.4",
 				CACertContent: "ca",
@@ -1052,6 +1134,61 @@ func TestClusterEqualRegistryMirrorConfiguration(t *testing.T) {
 			cluster2Regi: &v1alpha1.RegistryMirrorConfiguration{
 				Endpoint:      "1.2.3.5",
 				CACertContent: "ca",
+			},
+			want: false,
+		},
+		{
+			testName: "both exist, namespaces diff (one nil, one exists)",
+			cluster1Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{},
+			},
+			cluster2Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "eks-anywhere",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			testName: "both exist, namespaces diff (registry)",
+			cluster1Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "eks-anywhere",
+					},
+				},
+			},
+			cluster2Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "1.2.3.4",
+						Namespace: "eks-anywhere",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			testName: "both exist, namespaces diff (namespace)",
+			cluster1Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "eks-anywhere",
+					},
+				},
+			},
+			cluster2Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "",
+					},
+				},
 			},
 			want: false,
 		},
@@ -1066,6 +1203,48 @@ func TestClusterEqualRegistryMirrorConfiguration(t *testing.T) {
 			cluster2 := &v1alpha1.Cluster{
 				Spec: v1alpha1.ClusterSpec{
 					RegistryMirrorConfiguration: tt.cluster2Regi,
+				},
+			}
+
+			g := NewWithT(t)
+			g.Expect(cluster1.Equal(cluster2)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestClusterEqualPackageConfigurationNetwork(t *testing.T) {
+	testCases := []struct {
+		testName           string
+		disable1, disable2 bool
+		want               bool
+	}{
+		{
+			testName: "equal",
+			disable1: true,
+			disable2: true,
+			want:     true,
+		},
+		{
+			testName: "not equal",
+			disable1: true,
+			disable2: false,
+			want:     false,
+		},
+	}
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			cluster1 := &v1alpha1.Cluster{
+				Spec: v1alpha1.ClusterSpec{
+					Packages: &v1alpha1.PackageConfiguration{
+						Disable: tt.disable1,
+					},
+				},
+			}
+			cluster2 := &v1alpha1.Cluster{
+				Spec: v1alpha1.ClusterSpec{
+					Packages: &v1alpha1.PackageConfiguration{
+						Disable: tt.disable2,
+					},
 				},
 			}
 
@@ -1145,6 +1324,27 @@ func TestClusterEqualManagement(t *testing.T) {
 			g.Expect(cluster1.Equal(cluster2)).To(Equal(tt.want))
 		})
 	}
+}
+
+func TestClusterEqualDifferentBundlesRef(t *testing.T) {
+	cluster1 := &v1alpha1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster-1",
+		},
+		Spec: v1alpha1.ClusterSpec{
+			BundlesRef: &v1alpha1.BundlesRef{
+				APIVersion: "v1",
+				Name:       "bundles-1",
+				Namespace:  "eksa-system",
+			},
+		},
+	}
+
+	cluster2 := cluster1.DeepCopy()
+	cluster2.Spec.BundlesRef.Name = "bundles-2"
+
+	g := NewWithT(t)
+	g.Expect(cluster1.Equal(cluster2)).To(BeFalse())
 }
 
 func TestControlPlaneConfigurationEqual(t *testing.T) {
@@ -1363,10 +1563,22 @@ func TestRegistryMirrorConfigurationEqual(t *testing.T) {
 			cluster1Regi: &v1alpha1.RegistryMirrorConfiguration{
 				Endpoint:      "1.2.3.4",
 				CACertContent: "ca",
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "eks-anywhere",
+					},
+				},
 			},
 			cluster2Regi: &v1alpha1.RegistryMirrorConfiguration{
 				Endpoint:      "1.2.3.4",
 				CACertContent: "ca",
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "eks-anywhere",
+					},
+				},
 			},
 			want: true,
 		},
@@ -1388,6 +1600,61 @@ func TestRegistryMirrorConfigurationEqual(t *testing.T) {
 			},
 			cluster2Regi: &v1alpha1.RegistryMirrorConfiguration{
 				CACertContent: "ca2",
+			},
+			want: false,
+		},
+		{
+			testName: "both exist, namespaces diff (one nil, one exists)",
+			cluster1Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{},
+			},
+			cluster2Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "eks-anywhere",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			testName: "both exist, namespaces diff (registry)",
+			cluster1Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "eks-anywhere",
+					},
+				},
+			},
+			cluster2Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "",
+						Namespace: "eks-anywhere",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			testName: "both exist, namespaces diff (namespace)",
+			cluster1Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "eks-anywhere",
+					},
+				},
+			},
+			cluster2Regi: &v1alpha1.RegistryMirrorConfiguration{
+				OCINamespaces: []v1alpha1.OCINamespace{
+					{
+						Registry:  "public.ecr.aws",
+						Namespace: "",
+					},
+				},
 			},
 			want: false,
 		},
@@ -1449,10 +1716,891 @@ func TestPodIAMServiceAccountIssuerHasNotChanged(t *testing.T) {
 	}
 }
 
+func TestBundlesRefEqual(t *testing.T) {
+	testCases := []struct {
+		testName                 string
+		bundlesRef1, bundlesRef2 *v1alpha1.BundlesRef
+		want                     bool
+	}{
+		{
+			testName:    "both nil",
+			bundlesRef1: nil,
+			bundlesRef2: nil,
+			want:        true,
+		},
+		{
+			testName:    "1 nil, 2 not nil",
+			bundlesRef1: nil,
+			bundlesRef2: &v1alpha1.BundlesRef{},
+			want:        false,
+		},
+		{
+			testName:    "1 not nil, 2 nil",
+			bundlesRef1: &v1alpha1.BundlesRef{},
+			bundlesRef2: nil,
+			want:        false,
+		},
+		{
+			testName: "diff APIVersion",
+			bundlesRef1: &v1alpha1.BundlesRef{
+				APIVersion: "v1",
+				Name:       "bundles-1",
+				Namespace:  "eksa-system",
+			},
+			bundlesRef2: &v1alpha1.BundlesRef{
+				APIVersion: "v2",
+				Name:       "bundles-1",
+				Namespace:  "eksa-system",
+			},
+			want: false,
+		},
+		{
+			testName: "diff Name",
+			bundlesRef1: &v1alpha1.BundlesRef{
+				APIVersion: "v1",
+				Name:       "bundles-1",
+				Namespace:  "eksa-system",
+			},
+			bundlesRef2: &v1alpha1.BundlesRef{
+				APIVersion: "v1",
+				Name:       "bundles-2",
+				Namespace:  "eksa-system",
+			},
+			want: false,
+		},
+		{
+			testName: "diff Namespace",
+			bundlesRef1: &v1alpha1.BundlesRef{
+				APIVersion: "v1",
+				Name:       "bundles-1",
+				Namespace:  "eksa-system",
+			},
+			bundlesRef2: &v1alpha1.BundlesRef{
+				APIVersion: "v1",
+				Name:       "bundles-1",
+				Namespace:  "default",
+			},
+			want: false,
+		},
+		{
+			testName: "everything different",
+			bundlesRef1: &v1alpha1.BundlesRef{
+				APIVersion: "v1",
+				Name:       "bundles-1",
+				Namespace:  "eksa-system",
+			},
+			bundlesRef2: &v1alpha1.BundlesRef{
+				APIVersion: "v2",
+				Name:       "bundles-2",
+				Namespace:  "default",
+			},
+			want: false,
+		},
+		{
+			testName: "equal",
+			bundlesRef1: &v1alpha1.BundlesRef{
+				APIVersion: "v1",
+				Name:       "bundles-1",
+				Namespace:  "eksa-system",
+			},
+			bundlesRef2: &v1alpha1.BundlesRef{
+				APIVersion: "v1",
+				Name:       "bundles-1",
+				Namespace:  "eksa-system",
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.testName, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.bundlesRef1.Equal(tt.bundlesRef2)).To(Equal(tt.want))
+		})
+	}
+}
+
 func setSelfManaged(c *v1alpha1.Cluster, s bool) {
 	if s {
 		c.SetSelfManaged()
 	} else {
 		c.SetManagedBy("management-cluster")
+	}
+}
+
+func TestNodes_Equal(t *testing.T) {
+	tests := []struct {
+		name           string
+		nodes1, nodes2 *v1alpha1.Nodes
+		want           bool
+	}{
+		{
+			name:   "one nil",
+			nodes1: nil,
+			nodes2: &v1alpha1.Nodes{},
+			want:   false,
+		},
+		{
+			name:   "other nil",
+			nodes1: &v1alpha1.Nodes{},
+			nodes2: nil,
+			want:   false,
+		},
+		{
+			name:   "both nil",
+			nodes1: nil,
+			nodes2: nil,
+			want:   true,
+		},
+		{
+			name:   "one nil CIDRMasK",
+			nodes1: &v1alpha1.Nodes{},
+			nodes2: &v1alpha1.Nodes{
+				CIDRMaskSize: ptr.Int(2),
+			},
+			want: false,
+		},
+		{
+			name:   "both nil CIDRMasK",
+			nodes1: &v1alpha1.Nodes{},
+			nodes2: &v1alpha1.Nodes{},
+			want:   true,
+		},
+		{
+			name: "different not nil CIDRMasK",
+			nodes1: &v1alpha1.Nodes{
+				CIDRMaskSize: ptr.Int(3),
+			},
+			nodes2: &v1alpha1.Nodes{
+				CIDRMaskSize: ptr.Int(2),
+			},
+			want: false,
+		},
+		{
+			name: "equal not nil CIDRMasK",
+			nodes1: &v1alpha1.Nodes{
+				CIDRMaskSize: ptr.Int(2),
+			},
+			nodes2: &v1alpha1.Nodes{
+				CIDRMaskSize: ptr.Int(2),
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.nodes1.Equal(tt.nodes2)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestClusterHasAWSIamConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		cluster *v1alpha1.Cluster
+		want    bool
+	}{
+		{
+			name: "has AWSIamConfig",
+			cluster: &v1alpha1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-cluster",
+					Namespace: "eksa-system",
+				},
+				Spec: v1alpha1.ClusterSpec{
+					IdentityProviderRefs: []v1alpha1.Ref{
+						{
+							Name: "aws-config",
+							Kind: "AWSIamConfig",
+						},
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "no AWSIamConfig",
+			cluster: &v1alpha1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-cluster",
+					Namespace: "eksa-system",
+				},
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.cluster.HasAWSIamConfig()).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestPackageConfiguration_Equal(t *testing.T) {
+	same := &v1alpha1.PackageConfiguration{Disable: false}
+	tests := []struct {
+		name     string
+		pcn, pco *v1alpha1.PackageConfiguration
+		want     bool
+	}{
+		{
+			name: "one nil",
+			pcn:  &v1alpha1.PackageConfiguration{},
+			pco:  nil,
+			want: false,
+		},
+		{
+			name: "other nil",
+			pcn:  nil,
+			pco:  &v1alpha1.PackageConfiguration{},
+			want: false,
+		},
+		{
+			name: "both nil",
+			pcn:  nil,
+			pco:  nil,
+			want: true,
+		},
+		{
+			name: "equal",
+			pcn:  &v1alpha1.PackageConfiguration{Disable: true},
+			pco:  &v1alpha1.PackageConfiguration{Disable: true},
+			want: true,
+		},
+		{
+			name: "not equal",
+			pcn:  &v1alpha1.PackageConfiguration{Disable: true},
+			pco:  &v1alpha1.PackageConfiguration{Disable: false},
+			want: false,
+		},
+		{
+			name: "not equal controller",
+			pcn: &v1alpha1.PackageConfiguration{
+				Disable: true,
+				Controller: &v1alpha1.PackageControllerConfiguration{
+					Tag: "v1",
+				},
+			},
+			pco: &v1alpha1.PackageConfiguration{
+				Disable: false,
+				Controller: &v1alpha1.PackageControllerConfiguration{
+					Tag: "v2",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "equal controller",
+			pcn: &v1alpha1.PackageConfiguration{
+				Controller: &v1alpha1.PackageControllerConfiguration{
+					Tag: "v1",
+				},
+			},
+			pco: &v1alpha1.PackageConfiguration{
+				Controller: &v1alpha1.PackageControllerConfiguration{
+					Tag: "v1",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "not equal cronjob",
+			pcn: &v1alpha1.PackageConfiguration{
+				Disable: true,
+				CronJob: &v1alpha1.PackageControllerCronJob{
+					Tag: "v1",
+				},
+			},
+			pco: &v1alpha1.PackageConfiguration{
+				Disable: false,
+				CronJob: &v1alpha1.PackageControllerCronJob{
+					Tag: "v2",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "equal cronjob",
+			pcn: &v1alpha1.PackageConfiguration{
+				CronJob: &v1alpha1.PackageControllerCronJob{
+					Tag: "v1",
+				},
+			},
+			pco: &v1alpha1.PackageConfiguration{
+				CronJob: &v1alpha1.PackageControllerCronJob{
+					Tag: "v1",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "same",
+			pcn:  same,
+			pco:  same,
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.pcn.Equal(tt.pco)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestPackageControllerConfiguration_Equal(t *testing.T) {
+	same := &v1alpha1.PackageControllerConfiguration{Tag: "v1"}
+	tests := []struct {
+		name     string
+		pcn, pco *v1alpha1.PackageControllerConfiguration
+		want     bool
+	}{
+		{
+			name: "one nil",
+			pcn:  &v1alpha1.PackageControllerConfiguration{},
+			pco:  nil,
+			want: false,
+		},
+		{
+			name: "other nil",
+			pcn:  nil,
+			pco:  &v1alpha1.PackageControllerConfiguration{},
+			want: false,
+		},
+		{
+			name: "both nil",
+			pcn:  nil,
+			pco:  nil,
+			want: true,
+		},
+		{
+			name: "equal Repository",
+			pcn:  &v1alpha1.PackageControllerConfiguration{Repository: "a"},
+			pco:  &v1alpha1.PackageControllerConfiguration{Repository: "a"},
+			want: true,
+		},
+		{
+			name: "not equal Repository",
+			pcn:  &v1alpha1.PackageControllerConfiguration{Repository: "a"},
+			pco:  &v1alpha1.PackageControllerConfiguration{Repository: "b"},
+			want: false,
+		},
+		{
+			name: "equal Tag",
+			pcn:  &v1alpha1.PackageControllerConfiguration{Tag: "v1"},
+			pco:  &v1alpha1.PackageControllerConfiguration{Tag: "v1"},
+			want: true,
+		},
+		{
+			name: "not equal Tag",
+			pcn:  &v1alpha1.PackageControllerConfiguration{Tag: "v1"},
+			pco:  &v1alpha1.PackageControllerConfiguration{Tag: "v2"},
+			want: false,
+		},
+		{
+			name: "equal Digest",
+			pcn:  &v1alpha1.PackageControllerConfiguration{Digest: "a"},
+			pco:  &v1alpha1.PackageControllerConfiguration{Digest: "a"},
+			want: true,
+		},
+		{
+			name: "not equal Digest",
+			pcn:  &v1alpha1.PackageControllerConfiguration{Digest: "a"},
+			pco:  &v1alpha1.PackageControllerConfiguration{Digest: "b"},
+			want: false,
+		},
+		{
+			name: "equal DisableWebhooks",
+			pcn:  &v1alpha1.PackageControllerConfiguration{DisableWebhooks: true},
+			pco:  &v1alpha1.PackageControllerConfiguration{DisableWebhooks: true},
+			want: true,
+		},
+		{
+			name: "not equal DisableWebhooks",
+			pcn:  &v1alpha1.PackageControllerConfiguration{DisableWebhooks: true},
+			pco:  &v1alpha1.PackageControllerConfiguration{},
+			want: false,
+		},
+		{
+			name: "equal Env",
+			pcn:  &v1alpha1.PackageControllerConfiguration{Env: []string{"a"}},
+			pco:  &v1alpha1.PackageControllerConfiguration{Env: []string{"a"}},
+			want: true,
+		},
+		{
+			name: "not equal Env",
+			pcn:  &v1alpha1.PackageControllerConfiguration{Env: []string{"a"}},
+			pco:  &v1alpha1.PackageControllerConfiguration{Env: []string{"b"}},
+			want: false,
+		},
+		{
+			name: "not equal Resources",
+			pcn: &v1alpha1.PackageControllerConfiguration{
+				Resources: v1alpha1.PackageControllerResources{
+					Requests: v1alpha1.ImageResource{
+						CPU: "1",
+					},
+				},
+			},
+			pco: &v1alpha1.PackageControllerConfiguration{
+				Resources: v1alpha1.PackageControllerResources{
+					Requests: v1alpha1.ImageResource{
+						CPU: "2",
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "same",
+			pcn:  same,
+			pco:  same,
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.pcn.Equal(tt.pco)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestPackageControllerResources_Equal(t *testing.T) {
+	same := &v1alpha1.PackageControllerResources{
+		Limits: v1alpha1.ImageResource{
+			CPU: "3",
+		},
+	}
+	tests := []struct {
+		name     string
+		pcn, pco *v1alpha1.PackageControllerResources
+		want     bool
+	}{
+		{
+			name: "one nil",
+			pcn:  &v1alpha1.PackageControllerResources{},
+			pco:  nil,
+			want: false,
+		},
+		{
+			name: "other nil",
+			pcn:  nil,
+			pco:  &v1alpha1.PackageControllerResources{},
+			want: false,
+		},
+		{
+			name: "both nil",
+			pcn:  nil,
+			pco:  nil,
+			want: true,
+		},
+		{
+			name: "equal Requests",
+			pcn: &v1alpha1.PackageControllerResources{
+				Requests: v1alpha1.ImageResource{
+					CPU: "1",
+				},
+			},
+			pco: &v1alpha1.PackageControllerResources{
+				Requests: v1alpha1.ImageResource{
+					CPU: "1",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "not equal Requests",
+			pcn: &v1alpha1.PackageControllerResources{
+				Requests: v1alpha1.ImageResource{
+					CPU: "1",
+				},
+			},
+			pco: &v1alpha1.PackageControllerResources{
+				Requests: v1alpha1.ImageResource{
+					CPU: "2",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "equal Limits",
+			pcn: &v1alpha1.PackageControllerResources{
+				Limits: v1alpha1.ImageResource{
+					CPU: "1",
+				},
+			},
+			pco: &v1alpha1.PackageControllerResources{
+				Limits: v1alpha1.ImageResource{
+					CPU: "1",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "not equal Limits",
+			pcn: &v1alpha1.PackageControllerResources{
+				Limits: v1alpha1.ImageResource{
+					CPU: "1",
+				},
+			},
+			pco: &v1alpha1.PackageControllerResources{
+				Limits: v1alpha1.ImageResource{
+					CPU: "2",
+				},
+			},
+			want: false,
+		},
+		{
+			name: "same",
+			pcn:  same,
+			pco:  same,
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.pcn.Equal(tt.pco)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestImageResource_Equal(t *testing.T) {
+	same := &v1alpha1.ImageResource{
+		CPU: "3",
+	}
+	tests := []struct {
+		name     string
+		pcn, pco *v1alpha1.ImageResource
+		want     bool
+	}{
+		{
+			name: "one nil",
+			pcn:  &v1alpha1.ImageResource{},
+			pco:  nil,
+			want: false,
+		},
+		{
+			name: "other nil",
+			pcn:  nil,
+			pco:  &v1alpha1.ImageResource{},
+			want: false,
+		},
+		{
+			name: "both nil",
+			pcn:  nil,
+			pco:  nil,
+			want: true,
+		},
+		{
+			name: "equal CPU",
+			pcn: &v1alpha1.ImageResource{
+				CPU: "1",
+			},
+			pco: &v1alpha1.ImageResource{
+				CPU: "1",
+			},
+			want: true,
+		},
+		{
+			name: "not equal CPU",
+			pcn: &v1alpha1.ImageResource{
+				CPU: "1",
+			},
+			pco: &v1alpha1.ImageResource{
+				CPU: "2",
+			},
+			want: false,
+		},
+		{
+			name: "equal Memory",
+			pcn: &v1alpha1.ImageResource{
+				Memory: "1",
+			},
+			pco: &v1alpha1.ImageResource{
+				Memory: "1",
+			},
+			want: true,
+		},
+		{
+			name: "not equal Memory",
+			pcn: &v1alpha1.ImageResource{
+				Memory: "1",
+			},
+			pco: &v1alpha1.ImageResource{
+				Memory: "2",
+			},
+			want: false,
+		},
+		{
+			name: "same",
+			pcn:  same,
+			pco:  same,
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.pcn.Equal(tt.pco)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestPackageControllerCronJob_Equal(t *testing.T) {
+	same := &v1alpha1.PackageControllerCronJob{
+		Repository: "3",
+	}
+	tests := []struct {
+		name     string
+		pcn, pco *v1alpha1.PackageControllerCronJob
+		want     bool
+	}{
+		{
+			name: "one nil",
+			pcn:  &v1alpha1.PackageControllerCronJob{},
+			pco:  nil,
+			want: false,
+		},
+		{
+			name: "other nil",
+			pcn:  nil,
+			pco:  &v1alpha1.PackageControllerCronJob{},
+			want: false,
+		},
+		{
+			name: "both nil",
+			pcn:  nil,
+			pco:  nil,
+			want: true,
+		},
+		{
+			name: "equal Repository",
+			pcn: &v1alpha1.PackageControllerCronJob{
+				Repository: "1",
+			},
+			pco: &v1alpha1.PackageControllerCronJob{
+				Repository: "1",
+			},
+			want: true,
+		},
+		{
+			name: "not equal Repository",
+			pcn: &v1alpha1.PackageControllerCronJob{
+				Repository: "1",
+			},
+			pco: &v1alpha1.PackageControllerCronJob{
+				Repository: "2",
+			},
+			want: false,
+		},
+		{
+			name: "equal Tag",
+			pcn: &v1alpha1.PackageControllerCronJob{
+				Tag: "1",
+			},
+			pco: &v1alpha1.PackageControllerCronJob{
+				Tag: "1",
+			},
+			want: true,
+		},
+		{
+			name: "not equal Tag",
+			pcn: &v1alpha1.PackageControllerCronJob{
+				Tag: "1",
+			},
+			pco: &v1alpha1.PackageControllerCronJob{
+				Tag: "2",
+			},
+			want: false,
+		},
+		{
+			name: "equal Digest",
+			pcn: &v1alpha1.PackageControllerCronJob{
+				Digest: "1",
+			},
+			pco: &v1alpha1.PackageControllerCronJob{
+				Digest: "1",
+			},
+			want: true,
+		},
+		{
+			name: "not equal Digest",
+			pcn: &v1alpha1.PackageControllerCronJob{
+				Digest: "1",
+			},
+			pco: &v1alpha1.PackageControllerCronJob{
+				Digest: "2",
+			},
+			want: false,
+		},
+		{
+			name: "equal Disable",
+			pcn: &v1alpha1.PackageControllerCronJob{
+				Disable: true,
+			},
+			pco: &v1alpha1.PackageControllerCronJob{
+				Disable: true,
+			},
+			want: true,
+		},
+		{
+			name: "not equal Disable",
+			pcn: &v1alpha1.PackageControllerCronJob{
+				Disable: true,
+			},
+			pco: &v1alpha1.PackageControllerCronJob{
+				Disable: false,
+			},
+			want: false,
+		},
+		{
+			name: "same",
+			pcn:  same,
+			pco:  same,
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tt.pcn.Equal(tt.pco)).To(Equal(tt.want))
+		})
+	}
+}
+
+func TestCiliumConfigEquality(t *testing.T) {
+	tests := []struct {
+		Name  string
+		A     *v1alpha1.CiliumConfig
+		B     *v1alpha1.CiliumConfig
+		Equal bool
+	}{
+		{
+			Name:  "Nils",
+			A:     nil,
+			B:     nil,
+			Equal: true,
+		},
+		{
+			Name:  "NilA",
+			A:     nil,
+			B:     &v1alpha1.CiliumConfig{},
+			Equal: false,
+		},
+		{
+			Name:  "NilB",
+			A:     &v1alpha1.CiliumConfig{},
+			B:     nil,
+			Equal: false,
+		},
+		{
+			Name:  "ZeroValues",
+			A:     &v1alpha1.CiliumConfig{},
+			B:     &v1alpha1.CiliumConfig{},
+			Equal: true,
+		},
+		{
+			Name: "EqualPolicyEnforcement",
+			A: &v1alpha1.CiliumConfig{
+				PolicyEnforcementMode: "always",
+			},
+			B: &v1alpha1.CiliumConfig{
+				PolicyEnforcementMode: "always",
+			},
+			Equal: true,
+		},
+		{
+			Name: "DiffPolicyEnforcement",
+			A: &v1alpha1.CiliumConfig{
+				PolicyEnforcementMode: "always",
+			},
+			B: &v1alpha1.CiliumConfig{
+				PolicyEnforcementMode: "default",
+			},
+			Equal: false,
+		},
+		{
+			Name: "NilSkipUpgradeAFalse",
+			A: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(false),
+			},
+			B:     &v1alpha1.CiliumConfig{},
+			Equal: true,
+		},
+		{
+			Name: "NilSkipUpgradeBFalse",
+			A:    &v1alpha1.CiliumConfig{},
+			B: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(false),
+			},
+			Equal: true,
+		},
+		{
+			Name: "SkipUpgradeBothFalse",
+			A: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(false),
+			},
+			B: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(false),
+			},
+			Equal: true,
+		},
+		{
+			Name: "NilSkipUpgradeATrue",
+			A: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(true),
+			},
+			B:     &v1alpha1.CiliumConfig{},
+			Equal: false,
+		},
+		{
+			Name: "NilSkipUpgradeBTrue",
+			A:    &v1alpha1.CiliumConfig{},
+			B: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(true),
+			},
+			Equal: false,
+		},
+		{
+			Name: "SkipUpgradeBothTrue",
+			A: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(true),
+			},
+			B: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(true),
+			},
+			Equal: true,
+		},
+		{
+			Name: "SkipUpgradeAFalseBTrue",
+			A: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(false),
+			},
+			B: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(true),
+			},
+			Equal: false,
+		},
+		{
+			Name: "SkipUpgradeATrueBFalse",
+			A: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(true),
+			},
+			B: &v1alpha1.CiliumConfig{
+				SkipUpgrade: ptr.Bool(false),
+			},
+			Equal: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.Name, func(t *testing.T) {
+			g := NewWithT(t)
+			g.Expect(tc.A.Equal(tc.B)).To(Equal(tc.Equal))
+		})
 	}
 }

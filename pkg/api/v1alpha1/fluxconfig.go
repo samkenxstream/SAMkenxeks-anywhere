@@ -4,9 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 
-	"github.com/aws/eks-anywhere/pkg/config"
 	"github.com/aws/eks-anywhere/pkg/logger"
 )
 
@@ -16,32 +14,6 @@ const (
 	EcdsaAlgorithm   = "ecdsa"
 	Ed25519Algorithm = "ed25519"
 )
-
-func GetAndValidateFluxConfig(fileName string, refName string, clusterConfig *Cluster) (*FluxConfig, error) {
-	config, err := getFluxConfig(fileName)
-	if err != nil {
-		return nil, err
-	}
-	if err = validateFluxConfig(config); err != nil {
-		return nil, err
-	}
-	if err = validateFluxRefName(config, refName); err != nil {
-		return nil, err
-	}
-	if err = validateFluxNamespace(config, clusterConfig); err != nil {
-		return nil, err
-	}
-	return config, nil
-}
-
-func getFluxConfig(fileName string) (*FluxConfig, error) {
-	var config FluxConfig
-	err := ParseClusterConfig(fileName, &config)
-	if err != nil {
-		return nil, err
-	}
-	return &config, nil
-}
 
 func validateFluxConfig(config *FluxConfig) error {
 	if config.Spec.Git != nil && config.Spec.Github != nil {
@@ -84,12 +56,6 @@ func validateGitProviderConfig(gitProviderConfig GitProviderConfig) error {
 	} else {
 		logger.Info("Warning: 'sshKeyAlgorithm' is not set, defaulting to 'ecdsa'")
 	}
-	if privateKeyFile, ok := os.LookupEnv(config.EksaGitPrivateKeyTokenEnv); !ok || len(privateKeyFile) <= 0 {
-		return fmt.Errorf("%s is not set or is empty", config.EksaGitPrivateKeyTokenEnv)
-	}
-	if gitKnownHosts, ok := os.LookupEnv(config.EksaGitKnownHostsFileEnv); !ok || len(gitKnownHosts) <= 0 {
-		return fmt.Errorf("%s is not set or is empty", config.EksaGitKnownHostsFileEnv)
-	}
 
 	return validateRepositoryUrl(gitProviderConfig.RepositoryUrl)
 }
@@ -122,28 +88,6 @@ func validateRepositoryUrl(repositoryUrl string) error {
 func validateSshKeyAlgorithm(sshKeyAlgorithm string) error {
 	if sshKeyAlgorithm != RsaAlgorithm && sshKeyAlgorithm != EcdsaAlgorithm && sshKeyAlgorithm != Ed25519Algorithm {
 		return fmt.Errorf("'sshKeyAlgorithm' does not have a valid value in gitProviderConfig; sshKeyAlgorithm must be amongst %s, %s, %s", RsaAlgorithm, EcdsaAlgorithm, Ed25519Algorithm)
-	}
-	return nil
-}
-
-func validateFluxRefName(config *FluxConfig, refName string) error {
-	if config == nil {
-		return nil
-	}
-	if config.Name != refName {
-		return fmt.Errorf("FluxConfig retrieved with name %s does not match name (%s) specified in "+
-			"gitOpsRef", config.Name, refName)
-	}
-	return nil
-}
-
-func validateFluxNamespace(config *FluxConfig, clusterConfig *Cluster) error {
-	if config == nil {
-		return nil
-	}
-
-	if config.Namespace != clusterConfig.Namespace {
-		return errors.New("FluxConfig and Cluster objects must have the same namespace specified")
 	}
 	return nil
 }

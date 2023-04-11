@@ -1,3 +1,17 @@
+// Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package v1alpha1
 
 import "strings"
@@ -57,6 +71,49 @@ func (i Image) ChartName() string {
 	chart = strings.Replace(chart, ":", "-", 1)
 	chart += ".tgz"
 	return chart
+}
+
+func (i *Image) Registry() string {
+	result := strings.Split(i.URI, "/")
+	if len(result) < 1 {
+		return ""
+	}
+	return result[0]
+}
+
+func (i *Image) Repository() string {
+	rol := strings.TrimPrefix(i.URI, i.Registry()+"/")
+	result := strings.Split(rol, "@")
+	if len(result) < 2 {
+		result = strings.Split(rol, ":")
+		if len(result) < 1 {
+			return ""
+		}
+		return result[0]
+	}
+	return result[0]
+}
+
+func (i *Image) Digest() string {
+	rol := strings.TrimPrefix(i.URI, i.Registry()+"/")
+	result := strings.Split(rol, "@")
+	if len(result) < 2 {
+		return ""
+	}
+	return result[1]
+}
+
+func (i *Image) Version() string {
+	rol := strings.TrimPrefix(i.URI, i.Registry()+"/")
+	result := strings.Split(rol, "@")
+	if len(result) < 2 {
+		result = strings.Split(rol, ":")
+		if len(result) < 2 {
+			return ""
+		}
+		return result[1]
+	}
+	return ""
 }
 
 type Archive struct {

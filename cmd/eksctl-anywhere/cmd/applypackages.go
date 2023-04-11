@@ -13,13 +13,21 @@ import (
 
 type applyPackageOptions struct {
 	fileName string
+	// kubeConfig is an optional kubeconfig file to use when querying an
+	// existing cluster.
+	kubeConfig string
 }
 
 var apo = &applyPackageOptions{}
 
 func init() {
 	applyCmd.AddCommand(applyPackagesCommand)
-	applyPackagesCommand.Flags().StringVarP(&apo.fileName, "filename", "f", "", "Filename that contains curated packages custom resources to apply")
+
+	applyPackagesCommand.Flags().StringVarP(&apo.fileName, "filename", "f",
+		"", "Filename that contains curated packages custom resources to apply")
+	applyPackagesCommand.Flags().StringVar(&apo.kubeConfig, "kubeconfig", "",
+		"Path to an optional kubeconfig file to use.")
+
 	err := applyPackagesCommand.MarkFlagRequired("filename")
 	if err != nil {
 		log.Fatalf("Error marking flag as required: %v", err)
@@ -42,13 +50,16 @@ var applyPackagesCommand = &cobra.Command{
 }
 
 func applyPackages(ctx context.Context) error {
-	kubeConfig := kubeconfig.FromEnvironment()
-	deps, err := curatedpackages.NewDependenciesForPackages(ctx, kubeConfig)
+	kubeConfig, err := kubeconfig.ResolveAndValidateFilename(apo.kubeConfig, "")
+	if err != nil {
+		return err
+	}
+
+	deps, err := NewDependenciesForPackages(ctx, WithMountPaths(kubeConfig))
 	if err != nil {
 		return fmt.Errorf("unable to initialize executables: %v", err)
 	}
 	packages := curatedpackages.NewPackageClient(
-		nil,
 		deps.Kubectl,
 	)
 

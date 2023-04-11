@@ -11,21 +11,21 @@ import (
 const awsIamKubeconfig = `
 # clusters refers to the remote service.
 clusters:
-	- name: aws-iam-authenticator
-	cluster:
-		certificate-authority: /var/aws-iam-authenticator/cert.pem
-		server: https://localhost:21362/authenticate
+  - name: aws-iam-authenticator
+    cluster:
+      certificate-authority: /var/aws-iam-authenticator/cert.pem
+      server: https://localhost:21362/authenticate
 # users refers to the API Server's webhook configuration
 # (we don't need to authenticate the API server).
 users:
-	- name: apiserver
+  - name: apiserver
 # kubeconfig files require a context. Provide one for the API Server.
 current-context: webhook
 contexts:
 - name: webhook
-	context:
-	cluster: aws-iam-authenticator
-	user: apiserver
+  context:
+    cluster: aws-iam-authenticator
+    user: apiserver
 `
 
 var awsIamMounts = []bootstrapv1.HostPathMount{
@@ -56,7 +56,7 @@ var awsIamFiles = []bootstrapv1.File{
 		Permissions: "0640",
 		ContentFrom: &bootstrapv1.FileSource{
 			Secret: bootstrapv1.SecretFileSource{
-				Name: "aws-iam-authenticator-ca",
+				Name: "test-cluster-aws-iam-authenticator-ca",
 				Key:  "cert.pem",
 			},
 		},
@@ -67,7 +67,7 @@ var awsIamFiles = []bootstrapv1.File{
 		Permissions: "0640",
 		ContentFrom: &bootstrapv1.FileSource{
 			Secret: bootstrapv1.SecretFileSource{
-				Name: "aws-iam-authenticator-ca",
+				Name: "test-cluster-aws-iam-authenticator-ca",
 				Key:  "key.pem",
 			},
 		},

@@ -51,6 +51,18 @@ func TestNewWithMaxRetriesSuccessAfterRetries(t *testing.T) {
 	}
 }
 
+func TestNewWithNoTimeout(t *testing.T) {
+	r := retrier.NewWithNoTimeout()
+	fn := func() error {
+		return nil
+	}
+
+	err := r.Retry(fn)
+	if err != nil {
+		t.Fatalf("Retrier.Retry() error = %v, want nil", err)
+	}
+}
+
 func TestRetry(t *testing.T) {
 	wantRetries := 5
 	gotRetries := 0
@@ -169,5 +181,19 @@ func TestNewWithRetryPolicyFinishByPolicy(t *testing.T) {
 
 	if gotRetries != wantRetries {
 		t.Fatalf("Wrong number of retries, got %d, want %d", gotRetries, wantRetries)
+	}
+}
+
+func TestRetrierWithNilReceiver(t *testing.T) {
+	var retrier *retrier.Retrier = nil // This seems improbable, but happens in some other unit tests.
+
+	expectedError := errors.New("my expected error")
+	retryable := func() error {
+		return expectedError
+	}
+
+	err := retrier.Retry(retryable)
+	if err == nil || err.Error() != expectedError.Error() {
+		t.Errorf("Retrier didn't correctly handle nil receiver")
 	}
 }

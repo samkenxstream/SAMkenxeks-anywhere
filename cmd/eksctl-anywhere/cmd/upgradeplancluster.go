@@ -12,10 +12,10 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	fluxupgrader "github.com/aws/eks-anywhere/pkg/addonmanager/addonclients"
 	capiupgrader "github.com/aws/eks-anywhere/pkg/clusterapi"
 	eksaupgrader "github.com/aws/eks-anywhere/pkg/clustermanager"
 	"github.com/aws/eks-anywhere/pkg/dependencies"
+	fluxupgrader "github.com/aws/eks-anywhere/pkg/gitops/flux"
 	"github.com/aws/eks-anywhere/pkg/logger"
 	"github.com/aws/eks-anywhere/pkg/networking/cilium"
 	"github.com/aws/eks-anywhere/pkg/types"
@@ -77,9 +77,9 @@ func (uc *upgradeClusterOptions) upgradePlanCluster(ctx context.Context) error {
 	}
 
 	deps, err := dependencies.ForSpec(ctx, newClusterSpec).
-		WithClusterManager(newClusterSpec.Cluster).
-		WithProvider(uc.fileName, newClusterSpec.Cluster, cc.skipIpCheck, uc.hardwareFileName, cc.skipPowerActions, cc.setupTinkerbell, uc.forceClean).
-		WithFluxAddonClient(newClusterSpec.Cluster, newClusterSpec.FluxConfig, nil).
+		WithClusterManager(newClusterSpec.Cluster, nil).
+		WithProvider(uc.fileName, newClusterSpec.Cluster, false, uc.hardwareCSVPath, uc.forceClean, uc.tinkerbellBootstrapIP).
+		WithGitOpsFlux(newClusterSpec.Cluster, newClusterSpec.FluxConfig, nil).
 		WithCAPIManager().
 		Build(ctx)
 	if err != nil {
@@ -102,6 +102,9 @@ func (uc *upgradeClusterOptions) upgradePlanCluster(ctx context.Context) error {
 	}
 
 	componentChangeDiffs := eksaupgrader.EksaChangeDiff(currentSpec, newClusterSpec)
+	if componentChangeDiffs == nil {
+		componentChangeDiffs = &types.ChangeDiff{}
+	}
 	componentChangeDiffs.Append(fluxupgrader.FluxChangeDiff(currentSpec, newClusterSpec))
 	componentChangeDiffs.Append(capiupgrader.CapiChangeDiff(currentSpec, newClusterSpec, deps.Provider))
 	componentChangeDiffs.Append(cilium.ChangeDiff(currentSpec, newClusterSpec))

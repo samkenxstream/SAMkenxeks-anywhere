@@ -7,21 +7,23 @@ description: >
   Install/upgrade/uninstall Harbor
 ---
 
-{{% alert title="Important" color="warning" %}}
+If you have not already done so, make sure your cluster meets the [package prerequisites.]({{< relref "../prereq" >}})
+Be sure to refer to the [troubleshooting guide]({{< relref "../troubleshoot" >}}) in the event of a problem.
 
-If your cluster was created with a release of EKS Anywhere prior to v0.9.0, you may need to [install the package controller.]({{< relref ".." >}})
-
-{{% /alert %}}
+  {{% alert title="Important" color="warning" %}}
+   * Starting at `eksctl anywhere` version `v0.12.0`, packages on workload clusters are remotely managed by the management cluster.
+   * While following this guide to install packages on a workload cluster, please make sure the `kubeconfig` is pointing to the management cluster that was used to create the workload cluster. The only exception is the `kubectl create namespace` command below, which should be run with `kubeconfig` pointing to the workload cluster.
+   {{% /alert %}}
 
 ## Install
 
 <!-- this content needs to be indented so the numbers are automatically incremented -->
 1. Generate the package configuration
    ```bash
-   eksctl anywhere generate package harbor --source cluster > packages.yaml
+   eksctl anywhere generate package harbor --cluster <cluster-name> > harbor.yaml
    ```
 
-1. Add the desired configuration to `packages.yaml` 
+1. Add the desired configuration to `harbor.yaml` 
 
    Please see [complete configuration options]({{< relref "../../../reference/packagespec/harbor" >}}) for all configuration options and their default values.
 
@@ -41,9 +43,9 @@ If your cluster was created with a release of EKS Anywhere prior to v0.9.0, you 
    kind: Package
    metadata:
       name: my-harbor
-      namespace: eksa-packages
+      namespace: eksa-packages-<cluster-name>
    spec:
-      packageName: Harbor
+      packageName: harbor
       config: |-
          secretKey: "use-a-secret-key"
          externalURL: https://harbor.eksa.demo:30003
@@ -60,9 +62,9 @@ If your cluster was created with a release of EKS Anywhere prior to v0.9.0, you 
    kind: Package
    metadata:
       name: my-harbor
-      namespace: eksa-packages
+      namespace: eksa-packages-<cluster-name>
    spec:
-      packageName: Harbor
+      packageName: harbor
       config: |-
          secretKey: "use-a-secret-key"
          externalURL: http://harbor.eksa.demo:30002
@@ -74,24 +76,30 @@ If your cluster was created with a release of EKS Anywhere prior to v0.9.0, you 
 1. Install Harbor
 
    ```bash
-   eksctl anywhere create packages -f packages.yaml
+   eksctl anywhere create packages -f harbor.yaml
    ```
 
 1. Check Harbor
 
    ```bash
-   eksctl anywhere get packages
+   eksctl anywhere get packages --cluster <cluster-name>
    ```
 
    Example command output
    ```
    NAME        PACKAGE   AGE     STATE       CURRENTVERSION             TARGETVERSION        DETAIL
-   my-harbor   Harbor    5m34s   installed   v2.5.0                     v2.5.0 (latest)
+   my-harbor   harbor    5m34s   installed   v2.5.1                     v2.5.1 (latest)
    ```
 
    Harbor web portal is accessible at whatever `externalURL` is set to. See [complete configuration options]({{< relref "../../../reference/packagespec/harbor" >}}) for all default values.
 
    ![Harbor web portal](/images/harbor-portal.png)
+
+## Update
+To update package configuration, update harbor.yaml file, and run the following command:
+```bash
+eksctl anywhere apply package -f harbor.yaml
+```
 
 ## Upgrade
 {{% alert title="Note" color="primary" %}}
@@ -105,25 +113,25 @@ If your cluster was created with a release of EKS Anywhere prior to v0.9.0, you 
    Example command output
    ```bash
    NAME         VERSION   STATE
-   v1.21-1000   1.21      active (upgrade available)
-   v1.21-1001   1.21      inactive
+   v1.25-120    1.25      active (upgrade available)
+   v1.26-120    1.26      inactive
    ```
 
 1. Upgrade Harbor
    ```bash
-   eksctl anywhere upgrade packages --bundle-version v1.21-1001
+   eksctl anywhere upgrade packages --bundle-version v1.26-120
    ```
 
 1. Check Harbor
 
    ```bash
-   eksctl anywhere get packages
+   eksctl anywhere get packages --cluster <cluster-name>
    ```
 
    Example command output
    ```
    NAME        PACKAGE   AGE     STATE       CURRENTVERSION             TARGETVERSION        DETAIL
-   my-harbor   Harbor    14m     installed   v2.5.1                     v2.5.1 (latest)
+   my-harbor   Harbor    14m     installed   v2.7.1                     v2.7.1 (latest)
    ```
 
 ## Uninstall
@@ -135,5 +143,5 @@ If your cluster was created with a release of EKS Anywhere prior to v0.9.0, you 
 
    {{% /alert %}}
    ```bash
-   eksctl anywhere delete package my-harbor
+   eksctl anywhere delete package --cluster <cluster-name> my-harbor
    ```

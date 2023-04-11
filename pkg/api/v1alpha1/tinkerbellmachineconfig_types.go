@@ -1,16 +1,36 @@
 package v1alpha1
 
 import (
+	"encoding/json"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// TinkerbellMachineConfigSpec defines the desired state of TinkerbellMachineConfig
+// TinkerbellMachineConfigSpec defines the desired state of TinkerbellMachineConfig.
 type TinkerbellMachineConfigSpec struct {
-	TemplateRef Ref                 `json:"templateRef,omitempty"`
-	OSFamily    OSFamily            `json:"osFamily"`
-	Users       []UserConfiguration `json:"users,omitempty"`
+	HardwareSelector    HardwareSelector     `json:"hardwareSelector"`
+	TemplateRef         Ref                  `json:"templateRef,omitempty"`
+	OSFamily            OSFamily             `json:"osFamily"`
+	Users               []UserConfiguration  `json:"users,omitempty"`
+	HostOSConfiguration *HostOSConfiguration `json:"hostOSConfiguration,omitempty"`
+}
+
+// HardwareSelector models a simple key-value selector used in Tinkerbell provisioning.
+type HardwareSelector map[string]string
+
+// IsEmpty returns true if s has no key-value pairs.
+func (s HardwareSelector) IsEmpty() bool {
+	return len(s) == 0
+}
+
+func (s HardwareSelector) ToString() (string, error) {
+	encoded, err := json.Marshal(s)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
 }
 
 func (c *TinkerbellMachineConfig) PauseReconcile() {
@@ -72,13 +92,13 @@ func (c *TinkerbellMachineConfig) GetName() string {
 	return c.Name
 }
 
-// TinkerbellMachineConfigStatus defines the observed state of TinkerbellMachineConfig
+// TinkerbellMachineConfigStatus defines the observed state of TinkerbellMachineConfig.
 type TinkerbellMachineConfigStatus struct{}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// TinkerbellMachineConfig is the Schema for the tinkerbellmachineconfigs API
+// TinkerbellMachineConfig is the Schema for the tinkerbellmachineconfigs API.
 type TinkerbellMachineConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -109,9 +129,19 @@ func (c *TinkerbellMachineConfig) Marshallable() Marshallable {
 	return c.ConvertConfigToConfigGenerateStruct()
 }
 
+// Validate performs light and fast Tinkerbell machine config validation.
+func (c *TinkerbellMachineConfig) Validate() error {
+	return validateTinkerbellMachineConfig(c)
+}
+
+// SetDefaults sets defaults for Tinkerbell machine config.
+func (c *TinkerbellMachineConfig) SetDefaults() {
+	setTinkerbellMachineConfigDefaults(c)
+}
+
 // +kubebuilder:object:generate=false
 
-// Same as TinkerbellMachineConfig except stripped down for generation of yaml file during generate clusterconfig
+// Same as TinkerbellMachineConfig except stripped down for generation of yaml file during generate clusterconfig.
 type TinkerbellMachineConfigGenerate struct {
 	metav1.TypeMeta `json:",inline"`
 	ObjectMeta      `json:"metadata,omitempty"`
@@ -121,7 +151,7 @@ type TinkerbellMachineConfigGenerate struct {
 
 //+kubebuilder:object:root=true
 
-// TinkerbellMachineConfigList contains a list of TinkerbellMachineConfig
+// TinkerbellMachineConfigList contains a list of TinkerbellMachineConfig.
 type TinkerbellMachineConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

@@ -18,9 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const BundlesKind = "Bundles"
-
-// BundlesSpec defines the desired state of Bundles
+// BundlesSpec defines the desired state of Bundles.
 type BundlesSpec struct {
 	// Monotonically increasing release number
 	Number          int              `json:"number"`
@@ -29,13 +27,13 @@ type BundlesSpec struct {
 	VersionsBundles []VersionsBundle `json:"versionsBundles"`
 }
 
-// BundlesStatus defines the observed state of Bundles
+// BundlesStatus defines the observed state of Bundles.
 type BundlesStatus struct{}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// Bundles is the Schema for the bundles API
+// Bundles is the Schema for the bundles API.
 type Bundles struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -50,7 +48,7 @@ func (b *Bundles) DefaultEksAToolsImage() Image {
 
 //+kubebuilder:object:root=true
 
-// BundlesList contains a list of Bundles
+// BundlesList contains a list of Bundles.
 type BundlesList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
@@ -62,28 +60,29 @@ func init() {
 }
 
 type VersionsBundle struct {
-	KubeVersion            string                      `json:"kubeVersion"`
-	EksD                   EksDRelease                 `json:"eksD"`
-	CertManager            CertManagerBundle           `json:"certManager"`
-	ClusterAPI             CoreClusterAPI              `json:"clusterAPI"`
-	Bootstrap              KubeadmBootstrapBundle      `json:"bootstrap"`
-	ControlPlane           KubeadmControlPlaneBundle   `json:"controlPlane"`
-	Aws                    AwsBundle                   `json:"aws"`
-	VSphere                VSphereBundle               `json:"vSphere"`
-	CloudStack             CloudStackBundle            `json:"cloudStack,omitempty"`
-	Docker                 DockerBundle                `json:"docker"`
-	Eksa                   EksaBundle                  `json:"eksa"`
-	Cilium                 CiliumBundle                `json:"cilium"`
-	Kindnetd               KindnetdBundle              `json:"kindnetd"`
-	Flux                   FluxBundle                  `json:"flux"`
-	PackageController      PackageBundle               `json:"packageController"`
-	BottleRocketBootstrap  BottlerocketBootstrapBundle `json:"bottlerocketBootstrap"`
-	BottleRocketAdmin      BottlerocketAdminBundle     `json:"bottlerocketAdmin"`
-	ExternalEtcdBootstrap  EtcdadmBootstrapBundle      `json:"etcdadmBootstrap"`
-	ExternalEtcdController EtcdadmControllerBundle     `json:"etcdadmController"`
-	Tinkerbell             TinkerbellBundle            `json:"tinkerbell,omitempty"`
-	Haproxy                HaproxyBundle               `json:"haproxy,omitempty"`
-	Snow                   SnowBundle                  `json:"snow,omitempty"`
+	KubeVersion                string                           `json:"kubeVersion"`
+	EksD                       EksDRelease                      `json:"eksD"`
+	CertManager                CertManagerBundle                `json:"certManager"`
+	ClusterAPI                 CoreClusterAPI                   `json:"clusterAPI"`
+	Bootstrap                  KubeadmBootstrapBundle           `json:"bootstrap"`
+	ControlPlane               KubeadmControlPlaneBundle        `json:"controlPlane"`
+	VSphere                    VSphereBundle                    `json:"vSphere"`
+	CloudStack                 CloudStackBundle                 `json:"cloudStack,omitempty"`
+	Docker                     DockerBundle                     `json:"docker"`
+	Eksa                       EksaBundle                       `json:"eksa"`
+	Cilium                     CiliumBundle                     `json:"cilium"`
+	Kindnetd                   KindnetdBundle                   `json:"kindnetd"`
+	Flux                       FluxBundle                       `json:"flux"`
+	PackageController          PackageBundle                    `json:"packageController"`
+	BottleRocketHostContainers BottlerocketHostContainersBundle `json:"bottlerocketHostContainers"`
+	ExternalEtcdBootstrap      EtcdadmBootstrapBundle           `json:"etcdadmBootstrap"`
+	ExternalEtcdController     EtcdadmControllerBundle          `json:"etcdadmController"`
+	Tinkerbell                 TinkerbellBundle                 `json:"tinkerbell,omitempty"`
+	Haproxy                    HaproxyBundle                    `json:"haproxy,omitempty"`
+	Snow                       SnowBundle                       `json:"snow,omitempty"`
+	Nutanix                    NutanixBundle                    `json:"nutanix,omitempty"`
+	// This field has been deprecated
+	Aws *AwsBundle `json:"aws,omitempty"`
 }
 
 type EksDRelease struct {
@@ -110,7 +109,10 @@ type EksDRelease struct {
 	// KindNode points to a kind image built with this eks-d version
 	KindNode Image `json:"kindNode,omitempty"`
 
-	// Ova points to a collection of Ovas built with this eks-d version
+	// Ami points to a collection of AMIs built with this eks-d version
+	Ami OSImageBundle `json:"ami,omitempty"`
+
+	// Ova points to a collection of OVAs built with this eks-d version
 	Ova OSImageBundle `json:"ova,omitempty"`
 
 	// Raw points to a collection of Raw images built with this eks-d version
@@ -118,25 +120,25 @@ type EksDRelease struct {
 
 	// Components refers to the url that points to the EKS-D release CRD
 	Components string `json:"components,omitempty"`
+
+	// Etcdadm points to the etcdadm binary/tarball built for this eks-d kube version
+	Etcdadm Archive `json:"etcdadm,omitempty"`
+
+	// Crictl points to the crictl binary/tarball built for this eks-d kube version
+	Crictl Archive `json:"crictl,omitempty"`
+
+	// ImageBuilder points to the image-builder binary used to build eks-D based node images
+	ImageBuilder Archive `json:"imagebuilder,omitempty"`
 }
 
 type OSImageBundle struct {
-	Bottlerocket OSImage `json:"bottlerocket,omitempty"`
-	Ubuntu       OSImage `json:"ubuntu,omitempty"`
+	Bottlerocket Archive `json:"bottlerocket,omitempty"`
 }
 
-type OSImage struct {
-	Archive `json:",inline"`
-	Etcdadm Archive `json:"etcdadm,omitempty"`
-	Crictl  Archive `json:"crictl,omitempty"`
-}
-
-type BottlerocketBootstrapBundle struct {
-	Bootstrap Image `json:"bootstrap"`
-}
-
-type BottlerocketAdminBundle struct {
-	Admin Image `json:"admin"`
+type BottlerocketHostContainersBundle struct {
+	Admin            Image `json:"admin"`
+	Control          Image `json:"control"`
+	KubeadmBootstrap Image `json:"kubeadmBootstrap"`
 }
 
 type CertManagerBundle struct {
@@ -144,6 +146,7 @@ type CertManagerBundle struct {
 	Acmesolver Image    `json:"acmesolver"`
 	Cainjector Image    `json:"cainjector"`
 	Controller Image    `json:"controller"`
+	Ctl        Image    `json:"ctl"`
 	Webhook    Image    `json:"webhook"`
 	Manifest   Manifest `json:"manifest"`
 }
@@ -206,6 +209,7 @@ type DockerBundle struct {
 type CloudStackBundle struct {
 	Version              string   `json:"version"`
 	ClusterAPIController Image    `json:"clusterAPIController"`
+	KubeRbacProxy        Image    `json:"kubeRbacProxy"`
 	KubeVip              Image    `json:"kubeVip"`
 	Components           Manifest `json:"components"`
 	Metadata             Manifest `json:"metadata"`
@@ -233,9 +237,10 @@ type FluxBundle struct {
 }
 
 type PackageBundle struct {
-	Version    string `json:"version,omitempty"`
-	Controller Image  `json:"packageController"`
-	HelmChart  Image  `json:"helmChart,omitempty"`
+	Version        string `json:"version,omitempty"`
+	Controller     Image  `json:"packageController"`
+	TokenRefresher Image  `json:"tokenRefresher"`
+	HelmChart      Image  `json:"helmChart,omitempty"`
 }
 
 type EksaBundle struct {
@@ -263,38 +268,32 @@ type EtcdadmControllerBundle struct {
 }
 
 type TinkerbellStackBundle struct {
-	Actions ActionsBundle           `json:"actions"`
-	Boots   TinkerbellServiceBundle `json:"boots"`
-	Cfssl   Image                   `json:"cfssl"`
-	Hegel   TinkerbellServiceBundle `json:"hegel"`
-	Hook    HookBundle              `json:"hook"`
-	Pbnj    TinkerbellServiceBundle `json:"pbnj"`
-	Tink    TinkBundle              `json:"tink"`
+	Actions        ActionsBundle `json:"actions"`
+	Boots          Image         `json:"boots"`
+	Hegel          Image         `json:"hegel"`
+	TinkebellChart Image         `json:"tinkerbellChart"`
+	Hook           HookBundle    `json:"hook"`
+	Rufio          Image         `json:"rufio"`
+	Tink           TinkBundle    `json:"tink"`
 }
 
-// Tinkerbell Template Actions
+// Tinkerbell Template Actions.
 type ActionsBundle struct {
 	Cexec       Image `json:"cexec"`
 	Kexec       Image `json:"kexec"`
 	ImageToDisk Image `json:"imageToDisk"`
 	OciToDisk   Image `json:"ociToDisk"`
 	WriteFile   Image `json:"writeFile"`
-}
-
-type TinkerbellServiceBundle struct {
-	Image    Image    `json:"image"`
-	Manifest Manifest `json:"manifest"`
+	Reboot      Image `json:"reboot"`
 }
 
 type TinkBundle struct {
-	TinkCli        Image    `json:"tinkCli"`
-	TinkController Image    `json:"tinkController"`
-	TinkServer     Image    `json:"tinkServer"`
-	TinkWorker     Image    `json:"tinkWorker"`
-	Manifest       Manifest `json:"tinkManifest"`
+	TinkController Image `json:"tinkController"`
+	TinkServer     Image `json:"tinkServer"`
+	TinkWorker     Image `json:"tinkWorker"`
 }
 
-// Tinkerbell hook OS
+// Tinkerbell hook OS.
 type HookBundle struct {
 	Bootkit   Image    `json:"bootkit"`
 	Docker    Image    `json:"docker"`
@@ -312,6 +311,7 @@ type TinkerbellBundle struct {
 	Version              string                `json:"version"`
 	ClusterAPIController Image                 `json:"clusterAPIController"`
 	KubeVip              Image                 `json:"kubeVip"`
+	Envoy                Image                 `json:"envoy"`
 	Components           Manifest              `json:"components"`
 	Metadata             Manifest              `json:"metadata"`
 	ClusterTemplate      Manifest              `json:"clusterTemplate"`
@@ -323,9 +323,19 @@ type HaproxyBundle struct {
 }
 
 type SnowBundle struct {
-	Version    string   `json:"version"`
-	Manager    Image    `json:"manager"`
-	KubeVip    Image    `json:"kubeVip"`
-	Components Manifest `json:"components"`
-	Metadata   Manifest `json:"metadata"`
+	Version                   string   `json:"version"`
+	Manager                   Image    `json:"manager"`
+	KubeVip                   Image    `json:"kubeVip"`
+	Components                Manifest `json:"components"`
+	Metadata                  Manifest `json:"metadata"`
+	BottlerocketBootstrapSnow Image    `json:"bottlerocketBootstrapSnow"`
+}
+
+type NutanixBundle struct {
+	ClusterAPIController Image    `json:"clusterAPIController"`
+	Version              string   `json:"version"`
+	KubeVip              Image    `json:"kubeVip"`
+	Components           Manifest `json:"components"`
+	Metadata             Manifest `json:"metadata"`
+	ClusterTemplate      Manifest `json:"clusterTemplate"`
 }

@@ -1,12 +1,7 @@
-/*
-Copyright © 2022 NAME HERE <EMAIL ADDRESS>
-
-*/
 package cmd
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"path/filepath"
 	"strings"
@@ -14,19 +9,16 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/aws/eks-anywhere/cmd/eksctl-anywhere/cmd/internal/commands/artifacts"
-	"github.com/aws/eks-anywhere/pkg/curatedpackages"
 	"github.com/aws/eks-anywhere/pkg/curatedpackages/oras"
 	"github.com/aws/eks-anywhere/pkg/dependencies"
 	"github.com/aws/eks-anywhere/pkg/docker"
 	"github.com/aws/eks-anywhere/pkg/executables"
-	"github.com/aws/eks-anywhere/pkg/features"
 	"github.com/aws/eks-anywhere/pkg/helm"
-	"github.com/aws/eks-anywhere/pkg/manifests"
 	"github.com/aws/eks-anywhere/pkg/tar"
 	"github.com/aws/eks-anywhere/pkg/version"
 )
 
-// imagesCmd represents the images command
+// imagesCmd represents the images command.
 var downloadImagesCmd = &cobra.Command{
 	Use:   "images",
 	Short: "Download all eks-a images to disk",
@@ -49,21 +41,31 @@ func init() {
 		log.Fatalf("Cannot mark 'output' flag as required: %s", err)
 	}
 
-	downloadImagesCmd.Flags().BoolVar(&downloadImagesRunner.includePackages, "include-packages", false, "Flag to indicate inclusion of curated packages in downloaded images")
+	downloadImagesCmd.Flags().BoolVar(&downloadImagesRunner.includePackages, "include-packages", false, "this flag no longer works, use copy packages instead")
+	downloadImagesCmd.Flag("include-packages").Deprecated = "use copy packages command"
+	downloadImagesCmd.Flags().StringVarP(&downloadImagesRunner.bundlesOverride, "bundles-override", "", "", "Override default Bundles manifest (not recommended)")
+	downloadImagesCmd.Flags().BoolVar(&downloadImagesRunner.insecure, "insecure", false, "Flag to indicate skipping TLS verification while downloading helm charts")
 }
 
 var downloadImagesRunner = downloadImagesCommand{}
 
 type downloadImagesCommand struct {
 	outputFile      string
+	bundlesOverride string
 	includePackages bool
+	insecure        bool
 }
 
 func (c downloadImagesCommand) Run(ctx context.Context) error {
 	factory := dependencies.NewFactory()
+	helmOpts := []executables.HelmOpt{}
+	if c.insecure {
+		helmOpts = append(helmOpts, executables.WithInsecure())
+	}
 	deps, err := factory.
+		WithFileReader().
 		WithManifestReader().
-		WithHelm().
+		WithHelm(helmOpts...).
 		Build(ctx)
 	if err != nil {
 		return err
@@ -75,12 +77,9 @@ func (c downloadImagesCommand) Run(ctx context.Context) error {
 	imagesFile := filepath.Join(downloadFolder, imagesTarFile)
 	eksaToolsImageFile := filepath.Join(downloadFolder, eksaToolsImageTarFile)
 
-	if !features.IsActive(features.CuratedPackagesSupport()) && c.includePackages {
-		return fmt.Errorf("curated packages installation is not supported in this release")
-	}
-
 	downloadArtifacts := artifacts.Download{
-		Reader: fetchReader(deps.ManifestReader, c.includePackages),
+		Reader:     deps.ManifestReader,
+		FileReader: deps.FileReader,
 		BundlesImagesDownloader: docker.NewImageMover(
 			docker.NewOriginalRegistrySource(dockerClient),
 			docker.NewDiskDestination(dockerClient, imagesFile),
@@ -94,7 +93,8 @@ func (c downloadImagesCommand) Run(ctx context.Context) error {
 		TmpDowloadFolder:   downloadFolder,
 		DstFile:            c.outputFile,
 		Packager:           packagerForFile(c.outputFile),
-		ManifestDownloader: fetchManifestDownloader(downloadFolder, c.includePackages),
+		ManifestDownloader: oras.NewBundleDownloader(downloadFolder),
+		BundlesOverride:    c.bundlesOverride,
 	}
 
 	return downloadArtifacts.Run(ctx)
@@ -111,18 +111,4 @@ func packagerForFile(file string) packager {
 	} else {
 		return tar.NewPackager()
 	}
-}
-
-func fetchReader(reader *manifests.Reader, includePackages bool) artifacts.Reader {
-	if includePackages {
-		return curatedpackages.NewPackageReader(reader)
-	}
-	return reader
-}
-
-func fetchManifestDownloader(downloadFolder string, includePackages bool) artifacts.ManifestDownloader {
-	if includePackages {
-		return oras.NewBundleDownloader(downloadFolder)
-	}
-	return &artifacts.Noop{}
 }

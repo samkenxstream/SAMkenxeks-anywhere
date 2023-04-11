@@ -7,6 +7,8 @@ description: >
   Use Flux to manage clusters with GitOps
 ---
 
+> **_NOTE_**: GitOps support is available for vSphere clusters, but is not yet available for Bare Metal clusters
+>
 ## GitOps Support (optional)
 
 EKS Anywhere supports a [GitOps](https://www.weave.works/technologies/gitops/) workflow for the management of your cluster.
@@ -17,7 +19,7 @@ Once a change has been detected by the GitOps controller running in your cluster
 
 If you'd like to learn more about GitOps, and the associated best practices, [check out this introduction from Weaveworks](https://www.weave.works/technologies/gitops/).
 
->**_NOTE:_** Installing a GitOps controller needs to be done during cluster creation.
+>**_NOTE:_** Installing a GitOps controller can be done during cluster creation or through upgrade.
 In the event that GitOps installation fails, EKS Anywhere cluster creation will continue.
 
 ### Supported Cluster Properties
@@ -109,7 +111,7 @@ If you have an existing repo you can set that as your repository name in the con
 If you specify a repo in your `FluxConfig` which does not exist EKS Anywhere will create it for you.
 If you would like to create a new repo you can [click here](https://github.new) to create a new repo.
 
-If your repository contains multiple cluster specification files, store them in sub-folders and specify the [configuration path]({{< relref "../../reference/clusterspec/gitops/#__clusterconfigpath__-optional" >}}) in your cluster specification.
+If your repository contains multiple cluster specification files, store them in sub-folders and specify the [configuration path]({{< relref "../../reference/clusterspec/optional/gitops/#__clusterconfigpath__-optional" >}}) in your cluster specification.
 
 In order to accommodate the management cluster feature, the CLI will now structure the repo directory following a new convention:
 
@@ -121,6 +123,7 @@ clusters
     ├── management-cluster
     │   └── eksa-system
     │       └── eksa-cluster.yaml
+    │       └── kustomization.yaml
     ├── workload-cluster-1
     │   └── eksa-system
     │       └── eksa-cluster.yaml
@@ -158,7 +161,7 @@ spec:
 ### Create a GitOps enabled cluster
 
 Generate your cluster configuration and add the GitOps configuration.
-For a full spec reference see the [Cluster Spec reference]({{< relref "../../reference/clusterspec/gitops" >}}).
+For a full spec reference see the [Cluster Spec reference]({{< relref "../../reference/clusterspec/optional/gitops" >}}).
 
 >**_NOTE:_** After your cluster has been created the cluster configuration will automatically be committed to your git repo.
 
@@ -167,6 +170,18 @@ For a full spec reference see the [Cluster Spec reference]({{< relref "../../ref
     ```bash
     CLUSTER_NAME=gitops
     eksctl anywhere create cluster -f ${CLUSTER_NAME}.yaml
+    ```
+
+### Enable GitOps in an existing cluster
+
+You can also install Flux and enable GitOps in an existing cluster by running the upgrade command with updated cluster configuration.
+For a full spec reference see the [Cluster Spec reference]({{< relref "../../reference/clusterspec/optional/gitops" >}}).
+
+1. Upgrade an EKS Anywhere cluster with GitOps enabled.
+
+    ```bash
+    CLUSTER_NAME=gitops
+    eksctl anywhere upgrade cluster -f ${CLUSTER_NAME}.yaml
     ```
 
 ### Test GitOps controller
@@ -190,7 +205,7 @@ After your cluster has been created, you can test the GitOps controller by modif
     git push origin main
     ```
 
-1. The flux controller will automatically make the required changes.
+1. The Flux controller will automatically make the required changes.
 
    If you updated your node count, you can use this command to see the current node state.
     ```bash
@@ -250,7 +265,9 @@ ssh-keyscan -t ecdsa example.com >> my_eksa_known_hosts
 This will generate a known hosts file which contains only the entry necessary to verify the identity of example.com when using an `ecdsa` based private key file.
 
 ### Example FluxConfig cluster configuration for a generic git provider
-For a full spec reference see the [Cluster Spec reference]({{< relref "../../reference/clusterspec/gitops" >}}).
+For a full spec reference see the [Cluster Spec reference]({{< relref "../../reference/clusterspec/optional/gitops" >}}).
+
+>**_NOTE:_** The `repositoryUrl` value is of the format `ssh://git@provider.com/$REPO_OWNER/$REPO_NAME.git`. This may differ from the default SSH URL given by your provider. For Example, the github.com user interface provides an SSH URL containing a `:` before the repository owner, rather than a `/`. Make sure to replace this `:` with a `/`, if present.
 
 ```yaml
 apiVersion: anywhere.eks.amazonaws.com/v1alpha1
@@ -273,3 +290,94 @@ spec:
       repositoryUrl: ssh://git@provider.com/myAccount/myClusterGitopsRepo.git
       sshKeyAlgorithm: ecdsa
 ```
+
+## Manage separate workload clusters using Gitops
+
+Follow these steps if you want to use your initial cluster to create and manage separate workload clusters via Gitops.
+
+### Prerequisites
+- An existing EKS Anywhere cluster with Gitops enabled.
+  If your existing cluster does not have Gitops installed, see [Enable Gitops in an existing cluster.]({{< relref "#enable-gitops-in-an-existing-cluster" >}}).
+  
+- A cluster configuration file for your new workload cluster.
+
+### Create cluster using Gitops
+
+   1. Clone your git repo and add the new cluster specification.
+      Be sure to follow the directory structure defined [here]({{< relref "#create-gitops-configuration-repo" >}}):
+
+      ```
+      clusters/<management-cluster-name>/$CLUSTER_NAME/eksa-system/eksa-cluster.yaml
+      ```
+
+      > **NOTE**: Specify the `namespace` for all EKS Anywhere objects when you are using GitOps to create new workload clusters (even for the `default` namespace, use `namespace: default` on those objects).
+      >
+      >  Ensure workload cluster object names are distinct from management cluster object names. Be sure to set the `managementCluster` field to identify the name of the management cluster.
+      > 
+      > Make sure there is a `kustomization.yaml` file under the namespace directory for the management cluster. Creating a Gitops enabled management cluster with `eksctl` should create the `kustomization.yaml` file automatically.
+
+   2. Commit the file to your git repository.
+         ```bash
+         git add clusters/<management-cluster-name>/$CLUSTER_NAME/eksa-system/eksa-cluster.yaml
+         git commit -m 'Creating new workload cluster'
+         git push origin main
+         ```
+      
+   3. The Flux controller will automatically make the required changes.
+      You can list the workload clusters managed by the management cluster.
+      ```bash
+      export KUBECONFIG=${PWD}/${MGMT_CLUSTER_NAME}/${MGMT_CLUSTER_NAME}-eks-a-cluster.kubeconfig
+      kubectl get clusters
+      ```
+
+   4. The kubeconfig for your new cluster is stored as a secret on the management cluster.
+      You can get credentials and run the test application on your new workload cluster as follows:
+      ```bash
+      kubectl get secret -n eksa-system w01-kubeconfig -o jsonpath='{.data.value}' | base64 —decode > w01.kubeconfig
+      export KUBECONFIG=w01.kubeconfig
+      kubectl apply -f "https://anywhere.eks.amazonaws.com/manifests/hello-eks-a.yaml"
+      ```
+### Upgrade cluster using Gitops
+      
+   1. To upgrade the cluster using Gitops, modify the workload cluster yaml file with the desired changes.
+      As an example, to upgrade a cluster with version 1.24 to 1.25 you would change your spec:
+       ```bash
+        apiVersion: anywhere.eks.amazonaws.com/v1alpha1
+        kind: Cluster
+        metadata:
+          name: dev
+          namespace: default
+        spec:
+          controlPlaneConfiguration:
+            count: 1
+            endpoint:
+              host: "198.18.99.49"
+            machineGroupRef:
+              kind: VSphereMachineConfig
+              name: dev
+              ...
+          kubernetesVersion: "1.25"
+          ...
+      ```
+
+        >**_NOTE:_** If you have a custom machine image for your nodes you may also need to update your MachineConfig with a new `template`.
+      
+   2. Commit the file to your git repository. 
+      ```bash 
+      git add eksa-cluster.yaml
+      git commit -m 'Upgrading kubernetes version on new workload cluster'
+      git push origin main
+      ```
+
+For a comprehensive list of upgradeable fields for VSphere, Snow, and Nutanix, see the [upgradeable attributes section]({{< relref "./cluster-upgrades/vsphere-and-cloudstack-upgrades.md#upgradeable-cluster-attributes" >}}).
+      
+### Delete cluster using Gitops
+
+   1. To delete the cluster using Gitops, delete the workload cluster yaml file from your repository and commit those changes.
+      ```bash
+      git rm eksa-cluster.yaml
+      git commit -m 'Deleting workload cluster'
+      git push origin main
+      ```
+      
+  

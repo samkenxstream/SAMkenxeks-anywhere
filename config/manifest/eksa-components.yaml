@@ -23,7 +23,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: AWSDatacenterConfig is the Schema for the AWSDatacenterConfigs
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -38,7 +38,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: AWSDatacenterConfigSpec defines the desired state of AWSDatacenterConfig
+            description: AWSDatacenterConfigSpec defines the desired state of AWSDatacenterConfig.
             properties:
               amiID:
                 type: string
@@ -49,7 +49,7 @@ spec:
             - region
             type: object
           status:
-            description: AWSDatacenterConfigStatus defines the observed state of AWSDatacenterConfig
+            description: AWSDatacenterConfigStatus defines the observed state of AWSDatacenterConfig.
             type: object
         type: object
     served: true
@@ -82,7 +82,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: AWSIamConfig is the Schema for the awsiamconfigs API
+        description: AWSIamConfig is the Schema for the awsiamconfigs API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -97,7 +97,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: AWSIamConfigSpec defines the desired state of AWSIamConfig
+            description: AWSIamConfigSpec defines the desired state of AWSIamConfig.
             properties:
               awsRegion:
                 description: AWSRegion defines a region in an AWS partition
@@ -111,7 +111,7 @@ spec:
               mapRoles:
                 items:
                   description: MapRoles defines IAM role to a username and set of
-                    groups mapping using EKSConfigMap BackendMode
+                    groups mapping using EKSConfigMap BackendMode.
                   properties:
                     groups:
                       items:
@@ -129,7 +129,7 @@ spec:
               mapUsers:
                 items:
                   description: MapUsers defines IAM role to a username and set of
-                    groups mapping using EKSConfigMap BackendMode
+                    groups mapping using EKSConfigMap BackendMode.
                   properties:
                     groups:
                       items:
@@ -154,7 +154,7 @@ spec:
             - backendMode
             type: object
           status:
-            description: AWSIamConfigStatus defines the observed state of AWSIamConfig
+            description: AWSIamConfigStatus defines the observed state of AWSIamConfig.
             type: object
         type: object
     served: true
@@ -172,7 +172,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.4.1
+    controller-gen.kubebuilder.io/version: v0.6.1
   creationTimestamp: null
   name: bundles.anywhere.eks.amazonaws.com
 spec:
@@ -187,7 +187,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Bundles is the Schema for the bundles API
+        description: Bundles is the Schema for the bundles API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -202,7 +202,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: BundlesSpec defines the desired state of Bundles
+            description: BundlesSpec defines the desired state of Bundles.
             properties:
               cliMaxVersion:
                 type: string
@@ -215,6 +215,7 @@ spec:
                 items:
                   properties:
                     aws:
+                      description: This field has been deprecated
                       properties:
                         clusterTemplate:
                           properties:
@@ -383,7 +384,7 @@ spec:
                       - metadata
                       - version
                       type: object
-                    bottlerocketAdmin:
+                    bottlerocketHostContainers:
                       properties:
                         admin:
                           properties:
@@ -414,12 +415,36 @@ spec:
                               description: The image repository, name, and tag
                               type: string
                           type: object
-                      required:
-                      - admin
-                      type: object
-                    bottlerocketBootstrap:
-                      properties:
-                        bootstrap:
+                        control:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
+                        kubeadmBootstrap:
                           properties:
                             arch:
                               description: Architectures of the asset
@@ -449,7 +474,9 @@ spec:
                               type: string
                           type: object
                       required:
-                      - bootstrap
+                      - admin
+                      - control
+                      - kubeadmBootstrap
                       type: object
                     certManager:
                       properties:
@@ -540,6 +567,35 @@ spec:
                               description: The image repository, name, and tag
                               type: string
                           type: object
+                        ctl:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
                         manifest:
                           properties:
                             uri:
@@ -581,6 +637,7 @@ spec:
                       - acmesolver
                       - cainjector
                       - controller
+                      - ctl
                       - manifest
                       - webhook
                       type: object
@@ -723,6 +780,35 @@ spec:
                               description: URI points to the manifest yaml file
                               type: string
                           type: object
+                        kubeRbacProxy:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
                         kubeVip:
                           properties:
                             arch:
@@ -763,6 +849,7 @@ spec:
                       required:
                       - clusterAPIController
                       - components
+                      - kubeRbacProxy
                       - kubeVip
                       - metadata
                       - version
@@ -1019,6 +1106,45 @@ spec:
                       type: object
                     eksD:
                       properties:
+                        ami:
+                          description: Ami points to a collection of AMIs built with
+                            this eks-d version
+                          properties:
+                            bottlerocket:
+                              properties:
+                                arch:
+                                  description: Architectures of the asset
+                                  items:
+                                    type: string
+                                  type: array
+                                description:
+                                  type: string
+                                name:
+                                  description: The asset name
+                                  type: string
+                                os:
+                                  description: Operating system of the asset
+                                  enum:
+                                  - linux
+                                  - darwin
+                                  - windows
+                                  type: string
+                                osName:
+                                  description: Name of the OS like ubuntu, bottlerocket
+                                  type: string
+                                sha256:
+                                  description: The sha256 of the asset, only applies
+                                    for 'file' store
+                                  type: string
+                                sha512:
+                                  description: The sha512 of the asset, only applies
+                                    for 'file' store
+                                  type: string
+                                uri:
+                                  description: The URI where the asset is located
+                                  type: string
+                              type: object
+                          type: object
                         channel:
                           description: Release branch of the EKS-D release like 1-19,
                             1-20
@@ -1027,10 +1153,118 @@ spec:
                           description: Components refers to the url that points to
                             the EKS-D release CRD
                           type: string
+                        crictl:
+                          description: Crictl points to the crictl binary/tarball
+                            built for this eks-d kube version
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            sha256:
+                              description: The sha256 of the asset, only applies for
+                                'file' store
+                              type: string
+                            sha512:
+                              description: The sha512 of the asset, only applies for
+                                'file' store
+                              type: string
+                            uri:
+                              description: The URI where the asset is located
+                              type: string
+                          type: object
+                        etcdadm:
+                          description: Etcdadm points to the etcdadm binary/tarball
+                            built for this eks-d kube version
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            sha256:
+                              description: The sha256 of the asset, only applies for
+                                'file' store
+                              type: string
+                            sha512:
+                              description: The sha512 of the asset, only applies for
+                                'file' store
+                              type: string
+                            uri:
+                              description: The URI where the asset is located
+                              type: string
+                          type: object
                         gitCommit:
                           description: Git commit the component is built from, before
                             any patches
                           type: string
+                        imagebuilder:
+                          description: ImageBuilder points to the image-builder binary
+                            used to build eks-D based node images
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            sha256:
+                              description: The sha256 of the asset, only applies for
+                                'file' store
+                              type: string
+                            sha512:
+                              description: The sha512 of the asset, only applies for
+                                'file' store
+                              type: string
+                            uri:
+                              description: The URI where the asset is located
+                              type: string
+                          type: object
                         kindNode:
                           description: KindNode points to a kind image built with
                             this eks-d version
@@ -1072,7 +1306,7 @@ spec:
                         name:
                           type: string
                         ova:
-                          description: Ova points to a collection of Ovas built with
+                          description: Ova points to a collection of OVAs built with
                             this eks-d version
                           properties:
                             bottlerocket:
@@ -1082,178 +1316,8 @@ spec:
                                   items:
                                     type: string
                                   type: array
-                                crictl:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    sha256:
-                                      description: The sha256 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    sha512:
-                                      description: The sha512 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    uri:
-                                      description: The URI where the asset is located
-                                      type: string
-                                  type: object
                                 description:
                                   type: string
-                                etcdadm:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    sha256:
-                                      description: The sha256 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    sha512:
-                                      description: The sha512 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    uri:
-                                      description: The URI where the asset is located
-                                      type: string
-                                  type: object
-                                name:
-                                  description: The asset name
-                                  type: string
-                                os:
-                                  description: Operating system of the asset
-                                  enum:
-                                  - linux
-                                  - darwin
-                                  - windows
-                                  type: string
-                                osName:
-                                  description: Name of the OS like ubuntu, bottlerocket
-                                  type: string
-                                sha256:
-                                  description: The sha256 of the asset, only applies
-                                    for 'file' store
-                                  type: string
-                                sha512:
-                                  description: The sha512 of the asset, only applies
-                                    for 'file' store
-                                  type: string
-                                uri:
-                                  description: The URI where the asset is located
-                                  type: string
-                              type: object
-                            ubuntu:
-                              properties:
-                                arch:
-                                  description: Architectures of the asset
-                                  items:
-                                    type: string
-                                  type: array
-                                crictl:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    sha256:
-                                      description: The sha256 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    sha512:
-                                      description: The sha512 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    uri:
-                                      description: The URI where the asset is located
-                                      type: string
-                                  type: object
-                                description:
-                                  type: string
-                                etcdadm:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    sha256:
-                                      description: The sha256 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    sha512:
-                                      description: The sha512 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    uri:
-                                      description: The URI where the asset is located
-                                      type: string
-                                  type: object
                                 name:
                                   description: The asset name
                                   type: string
@@ -1291,178 +1355,8 @@ spec:
                                   items:
                                     type: string
                                   type: array
-                                crictl:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    sha256:
-                                      description: The sha256 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    sha512:
-                                      description: The sha512 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    uri:
-                                      description: The URI where the asset is located
-                                      type: string
-                                  type: object
                                 description:
                                   type: string
-                                etcdadm:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    sha256:
-                                      description: The sha256 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    sha512:
-                                      description: The sha512 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    uri:
-                                      description: The URI where the asset is located
-                                      type: string
-                                  type: object
-                                name:
-                                  description: The asset name
-                                  type: string
-                                os:
-                                  description: Operating system of the asset
-                                  enum:
-                                  - linux
-                                  - darwin
-                                  - windows
-                                  type: string
-                                osName:
-                                  description: Name of the OS like ubuntu, bottlerocket
-                                  type: string
-                                sha256:
-                                  description: The sha256 of the asset, only applies
-                                    for 'file' store
-                                  type: string
-                                sha512:
-                                  description: The sha512 of the asset, only applies
-                                    for 'file' store
-                                  type: string
-                                uri:
-                                  description: The URI where the asset is located
-                                  type: string
-                              type: object
-                            ubuntu:
-                              properties:
-                                arch:
-                                  description: Architectures of the asset
-                                  items:
-                                    type: string
-                                  type: array
-                                crictl:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    sha256:
-                                      description: The sha256 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    sha512:
-                                      description: The sha512 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    uri:
-                                      description: The URI where the asset is located
-                                      type: string
-                                  type: object
-                                description:
-                                  type: string
-                                etcdadm:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    sha256:
-                                      description: The sha256 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    sha512:
-                                      description: The sha512 of the asset, only applies
-                                        for 'file' store
-                                      type: string
-                                    uri:
-                                      description: The URI where the asset is located
-                                      type: string
-                                  type: object
                                 name:
                                   description: The asset name
                                   type: string
@@ -1930,153 +1824,7 @@ spec:
                       type: object
                     kubeVersion:
                       type: string
-                    packageController:
-                      properties:
-                        helmChart:
-                          properties:
-                            arch:
-                              description: Architectures of the asset
-                              items:
-                                type: string
-                              type: array
-                            description:
-                              type: string
-                            imageDigest:
-                              description: The SHA256 digest of the image manifest
-                              type: string
-                            name:
-                              description: The asset name
-                              type: string
-                            os:
-                              description: Operating system of the asset
-                              enum:
-                              - linux
-                              - darwin
-                              - windows
-                              type: string
-                            osName:
-                              description: Name of the OS like ubuntu, bottlerocket
-                              type: string
-                            uri:
-                              description: The image repository, name, and tag
-                              type: string
-                          type: object
-                        packageController:
-                          properties:
-                            arch:
-                              description: Architectures of the asset
-                              items:
-                                type: string
-                              type: array
-                            description:
-                              type: string
-                            imageDigest:
-                              description: The SHA256 digest of the image manifest
-                              type: string
-                            name:
-                              description: The asset name
-                              type: string
-                            os:
-                              description: Operating system of the asset
-                              enum:
-                              - linux
-                              - darwin
-                              - windows
-                              type: string
-                            osName:
-                              description: Name of the OS like ubuntu, bottlerocket
-                              type: string
-                            uri:
-                              description: The image repository, name, and tag
-                              type: string
-                          type: object
-                        version:
-                          type: string
-                      required:
-                      - packageController
-                      type: object
-                    snow:
-                      properties:
-                        components:
-                          properties:
-                            uri:
-                              description: URI points to the manifest yaml file
-                              type: string
-                          type: object
-                        kubeVip:
-                          properties:
-                            arch:
-                              description: Architectures of the asset
-                              items:
-                                type: string
-                              type: array
-                            description:
-                              type: string
-                            imageDigest:
-                              description: The SHA256 digest of the image manifest
-                              type: string
-                            name:
-                              description: The asset name
-                              type: string
-                            os:
-                              description: Operating system of the asset
-                              enum:
-                              - linux
-                              - darwin
-                              - windows
-                              type: string
-                            osName:
-                              description: Name of the OS like ubuntu, bottlerocket
-                              type: string
-                            uri:
-                              description: The image repository, name, and tag
-                              type: string
-                          type: object
-                        manager:
-                          properties:
-                            arch:
-                              description: Architectures of the asset
-                              items:
-                                type: string
-                              type: array
-                            description:
-                              type: string
-                            imageDigest:
-                              description: The SHA256 digest of the image manifest
-                              type: string
-                            name:
-                              description: The asset name
-                              type: string
-                            os:
-                              description: Operating system of the asset
-                              enum:
-                              - linux
-                              - darwin
-                              - windows
-                              type: string
-                            osName:
-                              description: Name of the OS like ubuntu, bottlerocket
-                              type: string
-                            uri:
-                              description: The image repository, name, and tag
-                              type: string
-                          type: object
-                        metadata:
-                          properties:
-                            uri:
-                              description: URI points to the manifest yaml file
-                              type: string
-                          type: object
-                        version:
-                          type: string
-                      required:
-                      - components
-                      - kubeVip
-                      - manager
-                      - metadata
-                      - version
-                      type: object
-                    tinkerbell:
+                    nutanix:
                       properties:
                         clusterAPIController:
                           properties:
@@ -2154,10 +1902,333 @@ spec:
                               description: URI points to the manifest yaml file
                               type: string
                           type: object
+                        version:
+                          type: string
+                      required:
+                      - clusterAPIController
+                      - clusterTemplate
+                      - components
+                      - kubeVip
+                      - metadata
+                      - version
+                      type: object
+                    packageController:
+                      properties:
+                        helmChart:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
+                        packageController:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
+                        tokenRefresher:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
+                        version:
+                          type: string
+                      required:
+                      - packageController
+                      - tokenRefresher
+                      type: object
+                    snow:
+                      properties:
+                        bottlerocketBootstrapSnow:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
+                        components:
+                          properties:
+                            uri:
+                              description: URI points to the manifest yaml file
+                              type: string
+                          type: object
+                        kubeVip:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
+                        manager:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
+                        metadata:
+                          properties:
+                            uri:
+                              description: URI points to the manifest yaml file
+                              type: string
+                          type: object
+                        version:
+                          type: string
+                      required:
+                      - bottlerocketBootstrapSnow
+                      - components
+                      - kubeVip
+                      - manager
+                      - metadata
+                      - version
+                      type: object
+                    tinkerbell:
+                      properties:
+                        clusterAPIController:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
+                        clusterTemplate:
+                          properties:
+                            uri:
+                              description: URI points to the manifest yaml file
+                              type: string
+                          type: object
+                        components:
+                          properties:
+                            uri:
+                              description: URI points to the manifest yaml file
+                              type: string
+                          type: object
+                        envoy:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
+                        kubeVip:
+                          properties:
+                            arch:
+                              description: Architectures of the asset
+                              items:
+                                type: string
+                              type: array
+                            description:
+                              type: string
+                            imageDigest:
+                              description: The SHA256 digest of the image manifest
+                              type: string
+                            name:
+                              description: The asset name
+                              type: string
+                            os:
+                              description: Operating system of the asset
+                              enum:
+                              - linux
+                              - darwin
+                              - windows
+                              type: string
+                            osName:
+                              description: Name of the OS like ubuntu, bottlerocket
+                              type: string
+                            uri:
+                              description: The image repository, name, and tag
+                              type: string
+                          type: object
+                        metadata:
+                          properties:
+                            uri:
+                              description: URI points to the manifest yaml file
+                              type: string
+                          type: object
                         tinkerbellStack:
                           properties:
                             actions:
-                              description: Tinkerbell Template Actions
+                              description: Tinkerbell Template Actions.
                               properties:
                                 cexec:
                                   properties:
@@ -2283,6 +2354,37 @@ spec:
                                         tag
                                       type: string
                                   type: object
+                                reboot:
+                                  properties:
+                                    arch:
+                                      description: Architectures of the asset
+                                      items:
+                                        type: string
+                                      type: array
+                                    description:
+                                      type: string
+                                    imageDigest:
+                                      description: The SHA256 digest of the image
+                                        manifest
+                                      type: string
+                                    name:
+                                      description: The asset name
+                                      type: string
+                                    os:
+                                      description: Operating system of the asset
+                                      enum:
+                                      - linux
+                                      - darwin
+                                      - windows
+                                      type: string
+                                    osName:
+                                      description: Name of the OS like ubuntu, bottlerocket
+                                      type: string
+                                    uri:
+                                      description: The image repository, name, and
+                                        tag
+                                      type: string
+                                  type: object
                                 writeFile:
                                   properties:
                                     arch:
@@ -2319,53 +2421,10 @@ spec:
                               - imageToDisk
                               - kexec
                               - ociToDisk
+                              - reboot
                               - writeFile
                               type: object
                             boots:
-                              properties:
-                                image:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    imageDigest:
-                                      description: The SHA256 digest of the image
-                                        manifest
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    uri:
-                                      description: The image repository, name, and
-                                        tag
-                                      type: string
-                                  type: object
-                                manifest:
-                                  properties:
-                                    uri:
-                                      description: URI points to the manifest yaml
-                                        file
-                                      type: string
-                                  type: object
-                              required:
-                              - image
-                              - manifest
-                              type: object
-                            cfssl:
                               properties:
                                 arch:
                                   description: Architectures of the asset
@@ -2396,50 +2455,35 @@ spec:
                               type: object
                             hegel:
                               properties:
-                                image:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    imageDigest:
-                                      description: The SHA256 digest of the image
-                                        manifest
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    uri:
-                                      description: The image repository, name, and
-                                        tag
-                                      type: string
-                                  type: object
-                                manifest:
-                                  properties:
-                                    uri:
-                                      description: URI points to the manifest yaml
-                                        file
-                                      type: string
-                                  type: object
-                              required:
-                              - image
-                              - manifest
+                                arch:
+                                  description: Architectures of the asset
+                                  items:
+                                    type: string
+                                  type: array
+                                description:
+                                  type: string
+                                imageDigest:
+                                  description: The SHA256 digest of the image manifest
+                                  type: string
+                                name:
+                                  description: The asset name
+                                  type: string
+                                os:
+                                  description: Operating system of the asset
+                                  enum:
+                                  - linux
+                                  - darwin
+                                  - windows
+                                  type: string
+                                osName:
+                                  description: Name of the OS like ubuntu, bottlerocket
+                                  type: string
+                                uri:
+                                  description: The image repository, name, and tag
+                                  type: string
                               type: object
                             hook:
-                              description: Tinkerbell hook OS
+                              description: Tinkerbell hook OS.
                               properties:
                                 bootkit:
                                   properties:
@@ -2697,83 +2741,37 @@ spec:
                               - kernel
                               - vmlinuz
                               type: object
-                            pbnj:
+                            rufio:
                               properties:
-                                image:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    imageDigest:
-                                      description: The SHA256 digest of the image
-                                        manifest
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    uri:
-                                      description: The image repository, name, and
-                                        tag
-                                      type: string
-                                  type: object
-                                manifest:
-                                  properties:
-                                    uri:
-                                      description: URI points to the manifest yaml
-                                        file
-                                      type: string
-                                  type: object
-                              required:
-                              - image
-                              - manifest
+                                arch:
+                                  description: Architectures of the asset
+                                  items:
+                                    type: string
+                                  type: array
+                                description:
+                                  type: string
+                                imageDigest:
+                                  description: The SHA256 digest of the image manifest
+                                  type: string
+                                name:
+                                  description: The asset name
+                                  type: string
+                                os:
+                                  description: Operating system of the asset
+                                  enum:
+                                  - linux
+                                  - darwin
+                                  - windows
+                                  type: string
+                                osName:
+                                  description: Name of the OS like ubuntu, bottlerocket
+                                  type: string
+                                uri:
+                                  description: The image repository, name, and tag
+                                  type: string
                               type: object
                             tink:
                               properties:
-                                tinkCli:
-                                  properties:
-                                    arch:
-                                      description: Architectures of the asset
-                                      items:
-                                        type: string
-                                      type: array
-                                    description:
-                                      type: string
-                                    imageDigest:
-                                      description: The SHA256 digest of the image
-                                        manifest
-                                      type: string
-                                    name:
-                                      description: The asset name
-                                      type: string
-                                    os:
-                                      description: Operating system of the asset
-                                      enum:
-                                      - linux
-                                      - darwin
-                                      - windows
-                                      type: string
-                                    osName:
-                                      description: Name of the OS like ubuntu, bottlerocket
-                                      type: string
-                                    uri:
-                                      description: The image repository, name, and
-                                        tag
-                                      type: string
-                                  type: object
                                 tinkController:
                                   properties:
                                     arch:
@@ -2803,13 +2801,6 @@ spec:
                                     uri:
                                       description: The image repository, name, and
                                         tag
-                                      type: string
-                                  type: object
-                                tinkManifest:
-                                  properties:
-                                    uri:
-                                      description: URI points to the manifest yaml
-                                        file
                                       type: string
                                   type: object
                                 tinkServer:
@@ -2875,20 +2866,47 @@ spec:
                                       type: string
                                   type: object
                               required:
-                              - tinkCli
                               - tinkController
-                              - tinkManifest
                               - tinkServer
                               - tinkWorker
+                              type: object
+                            tinkerbellChart:
+                              properties:
+                                arch:
+                                  description: Architectures of the asset
+                                  items:
+                                    type: string
+                                  type: array
+                                description:
+                                  type: string
+                                imageDigest:
+                                  description: The SHA256 digest of the image manifest
+                                  type: string
+                                name:
+                                  description: The asset name
+                                  type: string
+                                os:
+                                  description: Operating system of the asset
+                                  enum:
+                                  - linux
+                                  - darwin
+                                  - windows
+                                  type: string
+                                osName:
+                                  description: Name of the OS like ubuntu, bottlerocket
+                                  type: string
+                                uri:
+                                  description: The image repository, name, and tag
+                                  type: string
                               type: object
                           required:
                           - actions
                           - boots
-                          - cfssl
                           - hegel
                           - hook
-                          - pbnj
+                          - rufio
                           - tink
+                          - tinkerbellChart
                           type: object
                         version:
                           type: string
@@ -2896,6 +2914,7 @@ spec:
                       - clusterAPIController
                       - clusterTemplate
                       - components
+                      - envoy
                       - kubeVip
                       - metadata
                       - version
@@ -3109,10 +3128,8 @@ spec:
                       - version
                       type: object
                   required:
-                  - aws
                   - bootstrap
-                  - bottlerocketAdmin
-                  - bottlerocketBootstrap
+                  - bottlerocketHostContainers
                   - certManager
                   - cilium
                   - clusterAPI
@@ -3136,7 +3153,7 @@ spec:
             - versionsBundles
             type: object
           status:
-            description: BundlesStatus defines the observed state of Bundles
+            description: BundlesStatus defines the observed state of Bundles.
             type: object
         type: object
     served: true
@@ -3170,7 +3187,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: CloudStackDatacenterConfig is the Schema for the cloudstackdatacenterconfigs
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -3186,18 +3203,98 @@ spec:
             type: object
           spec:
             description: CloudStackDatacenterConfigSpec defines the desired state
-              of CloudStackDatacenterConfig
+              of CloudStackDatacenterConfig.
             properties:
               account:
-                description: Account typically represents a customer of the service
+                description: 'Account typically represents a customer of the service
                   provider or a department in a large organization. Multiple users
                   can exist in an account, and all CloudStack resources belong to
                   an account. Accounts have users and users have credentials to operate
                   on resources within that account. If an account name is provided,
-                  a domain must also be provided.
+                  a domain must also be provided. Deprecated: Please use AvailabilityZones
+                  instead'
                 type: string
+              availabilityZones:
+                description: AvailabilityZones list of different partitions to distribute
+                  VMs across - corresponds to a list of CAPI failure domains
+                items:
+                  description: CloudStackAvailabilityZone maps to a CAPI failure domain
+                    to distribute machines across Cloudstack infrastructure.
+                  properties:
+                    account:
+                      description: Account typically represents a customer of the
+                        service provider or a department in a large organization.
+                        Multiple users can exist in an account, and all CloudStack
+                        resources belong to an account. Accounts have users and users
+                        have credentials to operate on resources within that account.
+                        If an account name is provided, a domain must also be provided.
+                      type: string
+                    credentialsRef:
+                      description: CredentialRef is used to reference a secret in
+                        the eksa-system namespace
+                      type: string
+                    domain:
+                      description: Domain contains a grouping of accounts. Domains
+                        usually contain multiple accounts that have some logical relationship
+                        to each other and a set of delegated administrators with some
+                        authority over the domain and its subdomains This field is
+                        considered as a fully qualified domain name which is the same
+                        as the domain path without "ROOT/" prefix. For example, if
+                        "foo" is specified then a domain with "ROOT/foo" domain path
+                        is picked. The value "ROOT" is a special case that points
+                        to "the" ROOT domain of the CloudStack. That is, a domain
+                        with a path "ROOT/ROOT" is not allowed.
+                      type: string
+                    managementApiEndpoint:
+                      description: CloudStack Management API endpoint's IP. It is
+                        added to VM's noproxy list
+                      type: string
+                    name:
+                      description: Name is used as a unique identifier for each availability
+                        zone
+                      type: string
+                    zone:
+                      description: Zone represents the properties of the CloudStack
+                        zone in which clusters should be created, like the network.
+                      properties:
+                        id:
+                          description: Zone is the name or UUID of the CloudStack
+                            zone in which clusters should be created. Zones should
+                            be managed by a single CloudStack Management endpoint.
+                          type: string
+                        name:
+                          type: string
+                        network:
+                          description: Network is the name or UUID of the CloudStack
+                            network in which clusters should be created. It can either
+                            be an isolated or shared network. If it doesn’t already
+                            exist in CloudStack, it’ll automatically be created by
+                            CAPC as an isolated network. It can either be specified
+                            as a UUID or name In multiple-zones situation, only 'Shared'
+                            network is supported.
+                          properties:
+                            id:
+                              description: Id of a resource in the CloudStack environment.
+                                Mutually exclusive with Name
+                              type: string
+                            name:
+                              description: Name of a resource in the CloudStack environment.
+                                Mutually exclusive with Id
+                              type: string
+                          type: object
+                      required:
+                      - network
+                      type: object
+                  required:
+                  - credentialsRef
+                  - domain
+                  - managementApiEndpoint
+                  - name
+                  - zone
+                  type: object
+                type: array
               domain:
-                description: Domain contains a grouping of accounts. Domains usually
+                description: 'Domain contains a grouping of accounts. Domains usually
                   contain multiple accounts that have some logical relationship to
                   each other and a set of delegated administrators with some authority
                   over the domain and its subdomains This field is considered as a
@@ -3205,20 +3302,22 @@ spec:
                   without "ROOT/" prefix. For example, if "foo" is specified then
                   a domain with "ROOT/foo" domain path is picked. The value "ROOT"
                   is a special case that points to "the" ROOT domain of the CloudStack.
-                  That is, a domain with a path "ROOT/ROOT" is not allowed.
+                  That is, a domain with a path "ROOT/ROOT" is not allowed. Deprecated:
+                  Please use AvailabilityZones instead'
                 type: string
               managementApiEndpoint:
-                description: CloudStack Management API endpoint's IP. It is added
-                  to VM's noproxy list
+                description: 'CloudStack Management API endpoint''s IP. It is added
+                  to VM''s noproxy list Deprecated: Please use AvailabilityZones instead'
                 type: string
               zones:
-                description: Zones is a list of one or more zones that are managed
-                  by a single CloudStack management endpoint.
+                description: 'Zones is a list of one or more zones that are managed
+                  by a single CloudStack management endpoint. Deprecated: Please use
+                  AvailabilityZones instead'
                 items:
                   description: CloudStackZone is an organizational construct typically
                     used to represent a single datacenter, and all its physical and
                     virtual resources exist inside that zone. It can either be specified
-                    as a UUID or name
+                    as a UUID or name.
                   properties:
                     id:
                       description: Zone is the name or UUID of the CloudStack zone
@@ -3248,14 +3347,24 @@ spec:
                   - network
                   type: object
                 type: array
-            required:
-            - domain
-            - managementApiEndpoint
-            - zones
             type: object
           status:
             description: CloudStackDatacenterConfigStatus defines the observed state
-              of CloudStackDatacenterConfig
+              of CloudStackDatacenterConfig.
+            properties:
+              failureMessage:
+                description: FailureMessage indicates that there is a fatal problem
+                  reconciling the state, and will be set to a descriptive error message.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the latest generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              specValid:
+                description: SpecValid is set to true if cloudstackdatacenterconfig
+                  is validated.
+                type: boolean
             type: object
         type: object
     served: true
@@ -3289,7 +3398,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: CloudStackMachineConfig is the Schema for the cloudstackmachineconfigs
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -3305,7 +3414,7 @@ spec:
             type: object
           spec:
             description: CloudStackMachineConfigSpec defines the desired state of
-              CloudStackMachineConfig
+              CloudStackMachineConfig.
             properties:
               affinity:
                 description: Defaults to `no`. Can be `pro` or `anti`. If set to `pro`
@@ -3345,21 +3454,27 @@ spec:
                   with pre-defined size or custom specified disk size. It can either
                   be specified as a UUID or name
                 properties:
+                  customSizeInGB:
+                    description: disk size in GB, > 0 for customized disk offering;
+                      = 0 for non-customized disk offering
+                    format: int64
+                    type: integer
                   device:
-                    description: device name
+                    description: device name of the disk offering in VM, shows up
+                      in lsblk command
                     type: string
                   filesystem:
-                    description: filesystem
+                    description: filesystem used to mkfs in disk offering partition
                     type: string
                   id:
                     description: Id of a resource in the CloudStack environment. Mutually
                       exclusive with Name
                     type: string
                   label:
-                    description: disk label
+                    description: disk label used to label disk partition
                     type: string
                   mountPath:
-                    description: path the storage will use to mount in VM
+                    description: path the filesystem will use to mount in VM
                     type: string
                   name:
                     description: Name of a resource in the CloudStack environment.
@@ -3370,6 +3485,12 @@ spec:
                 - filesystem
                 - label
                 - mountPath
+                type: object
+              symlinks:
+                additionalProperties:
+                  type: string
+                description: Symlinks create soft symbolic links folders. One use
+                  case is to use data disk to store logs
                 type: object
               template:
                 description: Template refers to a VM image template which has been
@@ -3397,7 +3518,7 @@ spec:
                   be authorized to ssh into the machines
                 items:
                   description: UserConfiguration defines the configuration of the
-                    user to be added to the VM
+                    user to be added to the VM.
                   properties:
                     name:
                       type: string
@@ -3416,7 +3537,16 @@ spec:
             type: object
           status:
             description: CloudStackMachineConfigStatus defines the observed state
-              of CloudStackMachineConfig
+              of CloudStackMachineConfig.
+            properties:
+              failureMessage:
+                description: FailureMessage indicates that there is a fatal problem
+                  reconciling the state, and will be set to a descriptive error message.
+                type: string
+              specValid:
+                description: SpecValid is set to true if cloudstackmachineconfig is
+                  validated.
+                type: boolean
             type: object
         type: object
     served: true
@@ -3460,7 +3590,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Cluster is the Schema for the clusters API
+        description: Cluster is the Schema for the clusters API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -3475,8 +3605,27 @@ spec:
           metadata:
             type: object
           spec:
-            description: ClusterSpec defines the desired state of Cluster
+            description: ClusterSpec defines the desired state of Cluster.
             properties:
+              bundlesRef:
+                description: BundlesRef contains a reference to the Bundles containing
+                  the desired dependencies for the cluster
+                properties:
+                  apiVersion:
+                    description: APIVersion refers to the Bundles APIVersion
+                    type: string
+                  name:
+                    description: Name refers to the name of the Bundles object in
+                      the cluster
+                    type: string
+                  namespace:
+                    description: Namespace refers to the Bundles's namespace
+                    type: string
+                required:
+                - apiVersion
+                - name
+                - namespace
+                type: object
               clusterNetwork:
                 properties:
                   cni:
@@ -3493,6 +3642,11 @@ spec:
                               allowed between pods. Accepted values are default, always,
                               never.
                             type: string
+                          skipUpgrade:
+                            description: SkipUpgrade indicicates that Cilium maintenance
+                              should be skipped during upgrades. This can be used
+                              when operators wish to self manage the Cilium installation.
+                            type: boolean
                         type: object
                       kindnetd:
                         type: object
@@ -3507,6 +3661,14 @@ spec:
                               the DNS resolver configuration
                             type: string
                         type: object
+                    type: object
+                  nodes:
+                    properties:
+                      cidrMaskSize:
+                        description: CIDRMaskSize defines the mask size for node cidr
+                          in the cluster, default for ipv4 is 24. This is an optional
+                          field
+                        type: integer
                     type: object
                   pods:
                     description: Comma-separated list of CIDR blocks to use for pod
@@ -3586,6 +3748,22 @@ spec:
                       - key
                       type: object
                     type: array
+                  upgradeRolloutStrategy:
+                    description: UpgradeRolloutStrategy determines the rollout strategy
+                      to use for rolling upgrades and related parameters/knobs
+                    properties:
+                      rollingUpdate:
+                        description: ControlPlaneRollingUpdateParams is API for rolling
+                          update strategy knobs.
+                        properties:
+                          maxSurge:
+                            type: integer
+                        required:
+                        - maxSurge
+                        type: object
+                      type:
+                        type: string
+                    type: object
                 type: object
               datacenterRef:
                 properties:
@@ -3596,7 +3774,7 @@ spec:
                 type: object
               externalEtcdConfiguration:
                 description: ExternalEtcdConfiguration defines the configuration options
-                  for using unstacked etcd topology
+                  for using unstacked etcd topology.
                 properties:
                   count:
                     type: integer
@@ -3633,10 +3811,75 @@ spec:
                   name:
                     type: string
                 type: object
-              overrideClusterSpecFile:
-                description: 'Deprecated: This field has no function and is going
-                  to be removed in a future release.'
-                type: string
+              packages:
+                description: PackageConfiguration for installing EKS Anywhere curated
+                  packages.
+                properties:
+                  controller:
+                    description: Controller package controller configuration
+                    properties:
+                      digest:
+                        description: Digest package controller digest
+                        type: string
+                      disableWebhooks:
+                        description: DisableWebhooks on package controller
+                        type: boolean
+                      env:
+                        description: Env of package controller in the format `key=value`
+                        items:
+                          type: string
+                        type: array
+                      repository:
+                        description: Repository package controller repository
+                        type: string
+                      resources:
+                        description: Resources of package controller
+                        properties:
+                          limits:
+                            description: ImageResource resources for container image.
+                            properties:
+                              cpu:
+                                description: CPU image cpu
+                                type: string
+                              memory:
+                                description: Memory image memory
+                                type: string
+                            type: object
+                          requests:
+                            description: Requests for image resources
+                            properties:
+                              cpu:
+                                description: CPU image cpu
+                                type: string
+                              memory:
+                                description: Memory image memory
+                                type: string
+                            type: object
+                        type: object
+                      tag:
+                        description: Tag package controller tag
+                        type: string
+                    type: object
+                  cronjob:
+                    description: Cronjob for ecr token refresher
+                    properties:
+                      digest:
+                        description: Digest ecr token refresher digest
+                        type: string
+                      disable:
+                        description: Disable on cron job
+                        type: boolean
+                      repository:
+                        description: Repository ecr token refresher repository
+                        type: string
+                      tag:
+                        description: Tag ecr token refresher tag
+                        type: string
+                    type: object
+                  disable:
+                    description: Disable package controller on cluster
+                    type: boolean
+                type: object
               podIamConfig:
                 properties:
                   serviceAccountIssuer:
@@ -3657,8 +3900,11 @@ spec:
                 type: object
               registryMirrorConfiguration:
                 description: RegistryMirrorConfiguration defines the settings for
-                  image registry mirror
+                  image registry mirror.
                 properties:
+                  authenticate:
+                    description: Authenticate defines if registry requires authentication
+                    type: boolean
                   caCertContent:
                     description: CACertContent defines the contents registry mirror
                       CA certificate
@@ -3670,9 +3916,28 @@ spec:
                   insecureSkipVerify:
                     description: InsecureSkipVerify skips the registry certificate
                       verification. Only use this solution for isolated testing or
-                      in a tightly controlled, air-gapped environment. Currently only
-                      supported for snow provider
+                      in a tightly controlled, air-gapped environment.
                     type: boolean
+                  ociNamespaces:
+                    description: OCINamespaces defines the mapping from an upstream
+                      registry to a local namespace where upstream artifacts are placed
+                      into
+                    items:
+                      description: OCINamespace represents an entity in a local reigstry
+                        to group related images.
+                      properties:
+                        namespace:
+                          description: Namespace refers to the name of a namespace
+                            in the local registry
+                          type: string
+                        registry:
+                          description: Name refers to the name of the upstream registry
+                          type: string
+                      required:
+                      - namespace
+                      - registry
+                      type: object
+                    type: array
                   port:
                     description: Port defines the port exposed for registry mirror
                       endpoint
@@ -3681,6 +3946,19 @@ spec:
               workerNodeGroupConfigurations:
                 items:
                   properties:
+                    autoscalingConfiguration:
+                      description: AutoScalingConfiguration defines the auto scaling
+                        configuration
+                      properties:
+                        maxCount:
+                          description: MaxCount defines the maximum number of nodes
+                            for the associated resource group.
+                          type: integer
+                        minCount:
+                          description: MinCount defines the minimum number of nodes
+                            for the associated resource group.
+                          type: integer
+                      type: object
                     count:
                       description: Count defines the number of desired worker nodes.
                         Defaults to 1.
@@ -3732,11 +4010,30 @@ spec:
                         - key
                         type: object
                       type: array
+                    upgradeRolloutStrategy:
+                      description: UpgradeRolloutStrategy determines the rollout strategy
+                        to use for rolling upgrades and related parameters/knobs
+                      properties:
+                        rollingUpdate:
+                          description: WorkerNodesRollingUpdateParams is API for rolling
+                            update strategy knobs.
+                          properties:
+                            maxSurge:
+                              type: integer
+                            maxUnavailable:
+                              type: integer
+                          required:
+                          - maxSurge
+                          - maxUnavailable
+                          type: object
+                        type:
+                          type: string
+                      type: object
                   type: object
                 type: array
             type: object
           status:
-            description: ClusterStatus defines the observed state of Cluster
+            description: ClusterStatus defines the observed state of Cluster.
             properties:
               conditions:
                 items:
@@ -3843,7 +4140,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: DockerDatacenterConfig is the Schema for the DockerDatacenterConfigs
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -3858,11 +4155,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: DockerDatacenterConfigSpec defines the desired state of DockerDatacenterConfig
+            description: DockerDatacenterConfigSpec defines the desired state of DockerDatacenterConfig.
             type: object
           status:
             description: DockerDatacenterConfigStatus defines the observed state of
-              DockerDatacenterConfig
+              DockerDatacenterConfig.
             type: object
         type: object
     served: true
@@ -3912,7 +4209,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: FluxConfigSpec defines the desired state of FluxConfig
+            description: FluxConfigSpec defines the desired state of FluxConfig.
             properties:
               branch:
                 default: main
@@ -3962,7 +4259,7 @@ spec:
                 type: string
             type: object
           status:
-            description: FluxConfigStatus defines the observed state of FluxConfig
+            description: FluxConfigStatus defines the observed state of FluxConfig.
             type: object
         type: object
     served: true
@@ -4013,7 +4310,7 @@ spec:
               repository it links to.
             properties:
               flux:
-                description: Flux defines the Git repository options for Flux v2
+                description: Flux defines the Git repository options for Flux v2.
                 properties:
                   github:
                     description: github is the name of the Git Provider to host the
@@ -4050,7 +4347,396 @@ spec:
                 type: object
             type: object
           status:
-            description: GitOpsConfigStatus defines the observed state of GitOpsConfig
+            description: GitOpsConfigStatus defines the observed state of GitOpsConfig.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.6.1
+  creationTimestamp: null
+  name: nutanixdatacenterconfigs.anywhere.eks.amazonaws.com
+spec:
+  group: anywhere.eks.amazonaws.com
+  names:
+    kind: NutanixDatacenterConfig
+    listKind: NutanixDatacenterConfigList
+    plural: nutanixdatacenterconfigs
+    singular: nutanixdatacenterconfig
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: NutanixDatacenterConfig is the Schema for the NutanixDatacenterConfigs
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NutanixDatacenterConfigSpec defines the desired state of
+              NutanixDatacenterConfig.
+            properties:
+              additionalTrustBundle:
+                description: AdditionalTrustBundle is the optional PEM-encoded certificate
+                  bundle for users that configured their Prism Central with certificates
+                  from non-publicly trusted CAs
+                type: string
+              credentialRef:
+                description: CredentialRef is the reference to the secret name that
+                  contains the credentials for the Nutanix Prism Central. The namespace
+                  for the secret is assumed to be a constant i.e. eksa-system.
+                properties:
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                type: object
+              endpoint:
+                description: Endpoint is the Endpoint of Nutanix Prism Central
+                type: string
+              insecure:
+                description: Insecure is the optional flag to skip TLS verification.
+                  Nutanix Prism Central installation by default ships with a self-signed
+                  certificate that will fail TLS verification because the certificate
+                  is not issued by a public CA and does not have the IP SANs with
+                  the Prism Central endpoint. To accommodate the scenario where the
+                  user has not changed the default Certificate that ships with Prism
+                  Central, we allow the user to skip TLS verification. This is not
+                  recommended for production use.
+                type: boolean
+              port:
+                description: Port is the Port of Nutanix Prism Central
+                type: integer
+            required:
+            - endpoint
+            - port
+            type: object
+          status:
+            description: NutanixDatacenterConfigStatus defines the observed state
+              of NutanixDatacenterConfig.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.6.1
+  creationTimestamp: null
+  name: nutanixmachineconfigs.anywhere.eks.amazonaws.com
+spec:
+  group: anywhere.eks.amazonaws.com
+  names:
+    kind: NutanixMachineConfig
+    listKind: NutanixMachineConfigList
+    plural: nutanixmachineconfigs
+    singular: nutanixmachineconfig
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: NutanixMachineConfig is the Schema for the nutanix machine configs
+          API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NutanixMachineConfigSpec defines the desired state of NutanixMachineConfig.
+            properties:
+              cluster:
+                description: cluster is to identify the cluster (the Prism Element
+                  under management of the Prism Central), in which the Machine's VM
+                  will be created. The cluster identifier (uuid or name) can be obtained
+                  from the Prism Central console or using the prism_central API.
+                properties:
+                  name:
+                    description: name is the resource name in the PC
+                    type: string
+                  type:
+                    description: Type is the identifier type to use for this resource.
+                    enum:
+                    - uuid
+                    - name
+                    type: string
+                  uuid:
+                    description: uuid is the UUID of the resource in the PC.
+                    type: string
+                required:
+                - type
+                type: object
+              image:
+                description: image is to identify the OS image uploaded to the Prism
+                  Central (PC) The image identifier (uuid or name) can be obtained
+                  from the Prism Central console or using the Prism Central API.
+                properties:
+                  name:
+                    description: name is the resource name in the PC
+                    type: string
+                  type:
+                    description: Type is the identifier type to use for this resource.
+                    enum:
+                    - uuid
+                    - name
+                    type: string
+                  uuid:
+                    description: uuid is the UUID of the resource in the PC.
+                    type: string
+                required:
+                - type
+                type: object
+              memorySize:
+                anyOf:
+                - type: integer
+                - type: string
+                description: memorySize is the memory size (in Quantity format) of
+                  the VM The minimum memorySize is 2Gi bytes
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+              osFamily:
+                type: string
+              project:
+                description: Project is an optional property that specifies the Prism
+                  Central project so that machine resources can be linked to it. The
+                  project identifier (uuid or name) can be obtained from the Prism
+                  Central console or using the Prism Central API.
+                properties:
+                  name:
+                    description: name is the resource name in the PC
+                    type: string
+                  type:
+                    description: Type is the identifier type to use for this resource.
+                    enum:
+                    - uuid
+                    - name
+                    type: string
+                  uuid:
+                    description: uuid is the UUID of the resource in the PC.
+                    type: string
+                required:
+                - type
+                type: object
+              subnet:
+                description: subnet is to identify the cluster's network subnet to
+                  use for the Machine's VM The cluster identifier (uuid or name) can
+                  be obtained from the Prism Central console or using the Prism Central
+                  API.
+                properties:
+                  name:
+                    description: name is the resource name in the PC
+                    type: string
+                  type:
+                    description: Type is the identifier type to use for this resource.
+                    enum:
+                    - uuid
+                    - name
+                    type: string
+                  uuid:
+                    description: uuid is the UUID of the resource in the PC.
+                    type: string
+                required:
+                - type
+                type: object
+              systemDiskSize:
+                anyOf:
+                - type: integer
+                - type: string
+                description: systemDiskSize is size (in Quantity format) of the system
+                  disk of the VM The minimum systemDiskSize is 20Gi bytes
+                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                x-kubernetes-int-or-string: true
+              users:
+                items:
+                  description: UserConfiguration defines the configuration of the
+                    user to be added to the VM.
+                  properties:
+                    name:
+                      type: string
+                    sshAuthorizedKeys:
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - name
+                  - sshAuthorizedKeys
+                  type: object
+                type: array
+              vcpuSockets:
+                description: vcpuSockets is the number of vCPU sockets of the VM
+                format: int32
+                minimum: 1
+                type: integer
+              vcpusPerSocket:
+                description: vcpusPerSocket is the number of vCPUs per socket of the
+                  VM
+                format: int32
+                minimum: 1
+                type: integer
+            required:
+            - cluster
+            - image
+            - memorySize
+            - osFamily
+            - subnet
+            - systemDiskSize
+            - vcpuSockets
+            - vcpusPerSocket
+            type: object
+          status:
+            description: NutanixMachineConfigStatus defines the observed state of
+              NutanixMachineConfig.
+            properties:
+              addresses:
+                description: Addresses contains the Nutanix VM associated addresses.
+                  Address type is one of Hostname, ExternalIP, InternalIP, ExternalDNS,
+                  InternalDNS
+                items:
+                  description: MachineAddress contains information for the node's
+                    address.
+                  properties:
+                    address:
+                      description: The machine address.
+                      type: string
+                    type:
+                      description: Machine address type, one of Hostname, ExternalIP
+                        or InternalIP.
+                      type: string
+                  required:
+                  - address
+                  - type
+                  type: object
+                type: array
+              conditions:
+                description: Conditions defines current service state of the NutanixMachine.
+                items:
+                  description: Condition defines an observation of a Cluster API resource
+                    operational state.
+                  properties:
+                    lastTransitionTime:
+                      description: Last time the condition transitioned from one status
+                        to another. This should be when the underlying condition changed.
+                        If that is not known, then using the time when the API field
+                        changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: A human readable message indicating details about
+                        the transition. This field may be empty.
+                      type: string
+                    reason:
+                      description: The reason for the condition's last transition
+                        in CamelCase. The specific API may choose whether or not this
+                        field is considered a guaranteed API. This field may not be
+                        empty.
+                      type: string
+                    severity:
+                      description: Severity provides an explicit classification of
+                        Reason code, so the users or machines can immediately understand
+                        the current situation and act accordingly. The Severity field
+                        MUST be set only when Status=False.
+                      type: string
+                    status:
+                      description: Status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: Type of condition in CamelCase or in foo.example.com/CamelCase.
+                        Many .condition.type values are consistent across resources
+                        like Available, but because arbitrary conditions can be useful
+                        (see .node.status.conditions), the ability to deconflict is
+                        important.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - status
+                  - type
+                  type: object
+                type: array
+              nodeRef:
+                description: NodeRef is a reference to the corresponding workload
+                  cluster Node if it exists.
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  fieldPath:
+                    description: 'If referring to a piece of an object instead of
+                      an entire object, this string should contain a valid JSON/Go
+                      field access statement, such as desiredState.manifest.containers[2].
+                      For example, if the object reference is to a container within
+                      a pod, this would take on a value like: "spec.containers{name}"
+                      (where "name" refers to the name of the container that triggered
+                      the event) or if no container name is specified "spec.containers[2]"
+                      (container with index 2 in this pod). This syntax is chosen
+                      only to have some well-defined way of referencing a part of
+                      an object. TODO: this design is not final and this field is
+                      subject to change in the future.'
+                    type: string
+                  kind:
+                    description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                    type: string
+                  name:
+                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+                    type: string
+                  namespace:
+                    description: 'Namespace of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/'
+                    type: string
+                  resourceVersion:
+                    description: 'Specific resourceVersion to which this reference
+                      is made, if any. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#concurrency-control-and-consistency'
+                    type: string
+                  uid:
+                    description: 'UID of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#uids'
+                    type: string
+                type: object
+              ready:
+                description: Ready is true when the provider resource is ready.
+                type: boolean
+              vmUUID:
+                description: The Nutanix VM's UUID
+                type: string
             type: object
         type: object
     served: true
@@ -4083,7 +4769,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: OIDCConfig is the Schema for the oidcconfigs API
+        description: OIDCConfig is the Schema for the oidcconfigs API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -4098,7 +4784,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: OIDCConfigSpec defines the desired state of OIDCConfig
+            description: OIDCConfigSpec defines the desired state of OIDCConfig.
             properties:
               clientId:
                 description: ClientId defines the client ID for the OpenID Connect
@@ -4140,7 +4826,7 @@ spec:
                 type: string
             type: object
           status:
-            description: OIDCConfigStatus defines the observed state of OIDCConfig
+            description: OIDCConfigStatus defines the observed state of OIDCConfig.
             type: object
         type: object
     served: true
@@ -4174,7 +4860,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: SnowDatacenterConfig is the Schema for the SnowDatacenterConfigs
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -4189,11 +4875,100 @@ spec:
           metadata:
             type: object
           spec:
-            description: SnowDatacenterConfigSpec defines the desired state of SnowDatacenterConfig
+            description: SnowDatacenterConfigSpec defines the desired state of SnowDatacenterConfig.
+            properties:
+              identityRef:
+                description: IdentityRef is a reference to an identity for the Snow
+                  API to be used when reconciling this cluster
+                properties:
+                  kind:
+                    type: string
+                  name:
+                    type: string
+                type: object
             type: object
           status:
             description: SnowDatacenterConfigStatus defines the observed state of
-              SnowDatacenterConfig
+              SnowDatacenterConfig.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.6.1
+  creationTimestamp: null
+  name: snowippools.anywhere.eks.amazonaws.com
+spec:
+  group: anywhere.eks.amazonaws.com
+  names:
+    kind: SnowIPPool
+    listKind: SnowIPPoolList
+    plural: snowippools
+    singular: snowippool
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: SnowIPPool is the Schema for the SnowIPPools API.
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: SnowIPPoolSpec defines the desired state of SnowIPPool.
+            properties:
+              pools:
+                description: IPPools defines a list of ip pool for the DNI.
+                items:
+                  description: IPPool defines an ip pool with ip range, subnet and
+                    gateway.
+                  properties:
+                    gateway:
+                      description: Gateway is the gateway of the subnet for routing
+                        purpose.
+                      type: string
+                    ipEnd:
+                      description: IPEnd is the end address of an ip range.
+                      type: string
+                    ipStart:
+                      description: IPStart is the start address of an ip range.
+                      type: string
+                    subnet:
+                      description: Subnet is used to determine whether an ip is within
+                        subnet.
+                      type: string
+                  required:
+                  - gateway
+                  - ipEnd
+                  - ipStart
+                  - subnet
+                  type: object
+                type: array
+            type: object
+          status:
+            description: SnowIPPoolStatus defines the observed state of SnowIPPool.
             type: object
         type: object
     served: true
@@ -4226,7 +5001,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: SnowMachineConfig is the Schema for the SnowMachineConfigs API
+        description: SnowMachineConfig is the Schema for the SnowMachineConfigs API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -4241,30 +5016,212 @@ spec:
           metadata:
             type: object
           spec:
-            description: SnowMachineConfigSpec defines the desired state of SnowMachineConfigSpec
+            description: SnowMachineConfigSpec defines the desired state of SnowMachineConfigSpec.
             properties:
               amiID:
                 description: The AMI ID from which to create the machine instance.
                 type: string
+              containersVolume:
+                description: ContainersVolume provides the configuration options for
+                  the containers data storage volume.
+                properties:
+                  deviceName:
+                    description: Device name
+                    type: string
+                  size:
+                    description: Size specifies size (in Gi) of the storage device.
+                      Must be greater than the image snapshot size or 8 (whichever
+                      is greater).
+                    format: int64
+                    minimum: 8
+                    type: integer
+                  type:
+                    description: Type is the type of the volume (sbp1 for capacity-optimized
+                      HDD, sbg1 performance-optimized SSD, default is sbp1)
+                    enum:
+                    - sbp1
+                    - sbg1
+                    type: string
+                required:
+                - size
+                type: object
+              devices:
+                description: Devices contains a device ip list assigned by the user
+                  to provision machines.
+                items:
+                  type: string
+                type: array
+              hostOSConfiguration:
+                description: HostOSConfiguration provides OS specific configurations
+                  for the machine
+                properties:
+                  bottlerocketConfiguration:
+                    description: BottlerocketConfiguration defines the Bottlerocket
+                      configuration on the host OS. These settings only take effect
+                      when the `osFamily` is bottlerocket.
+                    properties:
+                      boot:
+                        description: Boot defines the boot settings for bottlerocket.
+                        properties:
+                          bootKernelParameters:
+                            additionalProperties:
+                              items:
+                                type: string
+                              type: array
+                            type: object
+                        type: object
+                      kernel:
+                        description: Kernel defines the kernel settings for bottlerocket.
+                        properties:
+                          sysctlSettings:
+                            additionalProperties:
+                              type: string
+                            description: SysctlSettings defines the kernel sysctl
+                              settings to set for bottlerocket nodes.
+                            type: object
+                        type: object
+                      kubernetes:
+                        description: Kubernetes defines the Kubernetes settings on
+                          the host OS.
+                        properties:
+                          allowedUnsafeSysctls:
+                            description: AllowedUnsafeSysctls defines the list of
+                              unsafe sysctls that can be set on a node.
+                            items:
+                              type: string
+                            type: array
+                          clusterDNSIPs:
+                            description: ClusterDNSIPs defines IP addresses of the
+                              DNS servers.
+                            items:
+                              type: string
+                            type: array
+                          maxPods:
+                            description: MaxPods defines the maximum number of pods
+                              that can run on a node.
+                            type: integer
+                        type: object
+                    type: object
+                  ntpConfiguration:
+                    description: NTPConfiguration defines the NTP configuration on
+                      the host OS.
+                    properties:
+                      servers:
+                        description: Servers defines a list of NTP servers to be configured
+                          on the host OS.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - servers
+                    type: object
+                type: object
               instanceType:
-                description: 'InstanceType is the type of instance to create. Valid
-                  values: "sbe-c.large" (default), "sbe-c.xlarge", "sbe-c.2xlarge"
-                  and "sbe-c.4xlarge".'
+                description: InstanceType is the type of instance to create.
+                type: string
+              network:
+                description: Network provides the custom network setting for the machine.
+                properties:
+                  directNetworkInterfaces:
+                    description: DirectNetworkInterfaces contains a list of direct
+                      network interface (DNI) configuration.
+                    items:
+                      description: SnowDirectNetworkInterface defines a direct network
+                        interface (DNI) configuration.
+                      properties:
+                        dhcp:
+                          description: DHCP defines whether DHCP is used to assign
+                            ip for the DNI.
+                          type: boolean
+                        index:
+                          description: Index is the index number of DNI used to clarify
+                            the position in the list. Usually starts with 1.
+                          maximum: 8
+                          minimum: 1
+                          type: integer
+                        ipPoolRef:
+                          description: IPPool contains a reference to a snow ip pool
+                            which provides a range of ip addresses. When specified,
+                            an ip address selected from the pool is allocated to this
+                            DNI.
+                          properties:
+                            kind:
+                              type: string
+                            name:
+                              type: string
+                          type: object
+                        primary:
+                          description: Primary indicates whether the DNI is primary
+                            or not.
+                          type: boolean
+                        vlanID:
+                          description: VlanID is the vlan id assigned by the user
+                            for the DNI.
+                          format: int32
+                          maximum: 4095
+                          minimum: 0
+                          type: integer
+                      type: object
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                type: object
+              nonRootVolumes:
+                description: NonRootVolumes provides the configuration options for
+                  the non root storage volumes.
+                items:
+                  description: 'Volume encapsulates the configuration options for
+                    the storage device TODO: Trim the fields that do not apply for
+                    Snow.'
+                  properties:
+                    deviceName:
+                      description: Device name
+                      type: string
+                    size:
+                      description: Size specifies size (in Gi) of the storage device.
+                        Must be greater than the image snapshot size or 8 (whichever
+                        is greater).
+                      format: int64
+                      minimum: 8
+                      type: integer
+                    type:
+                      description: Type is the type of the volume (sbp1 for capacity-optimized
+                        HDD, sbg1 performance-optimized SSD, default is sbp1)
+                      enum:
+                      - sbp1
+                      - sbg1
+                      type: string
+                  required:
+                  - size
+                  type: object
+                type: array
+              osFamily:
+                description: 'OSFamily is the node instance OS. Valid values: "bottlerocket"
+                  and "ubuntu".'
                 type: string
               physicalNetworkConnector:
                 description: 'PhysicalNetworkConnector is the physical network connector
                   type to use for creating direct network interfaces (DNI). Valid
-                  values: "SFP_PLUS" (default) and "QSFP"'
+                  values: "SFP_PLUS" (default), "QSFP" and "RJ45".'
                 type: string
               sshKeyName:
                 description: SSHKeyName is the name of the ssh key defined in the
                   aws snow key pairs, to attach to the instance.
                 type: string
             required:
-            - amiID
+            - network
             type: object
           status:
-            description: SnowMachineConfigStatus defines the observed state of SnowMachineConfig
+            description: SnowMachineConfigStatus defines the observed state of SnowMachineConfig.
+            properties:
+              failureMessage:
+                description: FailureMessage indicates that there is a fatal problem
+                  reconciling the state, and will be set to a descriptive error message.
+                type: string
+              specValid:
+                description: SpecValid is set to true if vspheredatacenterconfig is
+                  validated.
+                type: boolean
             type: object
         type: object
     served: true
@@ -4298,7 +5255,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: TinkerbellDatacenterConfig is the Schema for the TinkerbellDatacenterConfigs
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -4314,30 +5271,33 @@ spec:
             type: object
           spec:
             description: TinkerbellDatacenterConfigSpec defines the desired state
-              of TinkerbellDatacenterConfig
+              of TinkerbellDatacenterConfig.
             properties:
-              tinkerbellCertURL:
+              hookImagesURLPath:
+                description: HookImagesURLPath can be used to override the default
+                  Hook images path to pull from a local server.
                 type: string
-              tinkerbellGRPCAuth:
+              osImageURL:
+                description: OSImageURL can be used to override the default OS image
+                  path to pull from a local server.
                 type: string
-              tinkerbellHegelURL:
-                type: string
+              skipLoadBalancerDeployment:
+                description: SkipLoadBalancerDeployment when set to "true" can be
+                  used to skip deploying a load balancer to expose Tinkerbell stack.
+                  Users will need to deploy and configure a load balancer manually
+                  after the cluster is created.
+                type: boolean
               tinkerbellIP:
-                description: 'Important: Run "make generate" to regenerate code after
-                  modifying this file'
-                type: string
-              tinkerbellPBnJGRPCAuth:
+                description: TinkerbellIP is used to configure a VIP for hosting the
+                  Tinkerbell services.
                 type: string
             required:
-            - tinkerbellCertURL
-            - tinkerbellGRPCAuth
-            - tinkerbellHegelURL
             - tinkerbellIP
-            - tinkerbellPBnJGRPCAuth
             type: object
           status:
-            description: TinkerbellDatacenterConfigStatus defines the observed state
-              of TinkerbellDatacenterConfig
+            description: "TinkerbellDatacenterConfigStatus defines the observed state
+              of TinkerbellDatacenterConfig \n Important: Run \"make generate\" to
+              regenerate code after modifying this file."
             type: object
         type: object
     served: true
@@ -4371,7 +5331,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: TinkerbellMachineConfig is the Schema for the tinkerbellmachineconfigs
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -4387,8 +5347,79 @@ spec:
             type: object
           spec:
             description: TinkerbellMachineConfigSpec defines the desired state of
-              TinkerbellMachineConfig
+              TinkerbellMachineConfig.
             properties:
+              hardwareSelector:
+                additionalProperties:
+                  type: string
+                description: HardwareSelector models a simple key-value selector used
+                  in Tinkerbell provisioning.
+                type: object
+              hostOSConfiguration:
+                description: HostOSConfiguration defines the configuration settings
+                  on the host OS.
+                properties:
+                  bottlerocketConfiguration:
+                    description: BottlerocketConfiguration defines the Bottlerocket
+                      configuration on the host OS. These settings only take effect
+                      when the `osFamily` is bottlerocket.
+                    properties:
+                      boot:
+                        description: Boot defines the boot settings for bottlerocket.
+                        properties:
+                          bootKernelParameters:
+                            additionalProperties:
+                              items:
+                                type: string
+                              type: array
+                            type: object
+                        type: object
+                      kernel:
+                        description: Kernel defines the kernel settings for bottlerocket.
+                        properties:
+                          sysctlSettings:
+                            additionalProperties:
+                              type: string
+                            description: SysctlSettings defines the kernel sysctl
+                              settings to set for bottlerocket nodes.
+                            type: object
+                        type: object
+                      kubernetes:
+                        description: Kubernetes defines the Kubernetes settings on
+                          the host OS.
+                        properties:
+                          allowedUnsafeSysctls:
+                            description: AllowedUnsafeSysctls defines the list of
+                              unsafe sysctls that can be set on a node.
+                            items:
+                              type: string
+                            type: array
+                          clusterDNSIPs:
+                            description: ClusterDNSIPs defines IP addresses of the
+                              DNS servers.
+                            items:
+                              type: string
+                            type: array
+                          maxPods:
+                            description: MaxPods defines the maximum number of pods
+                              that can run on a node.
+                            type: integer
+                        type: object
+                    type: object
+                  ntpConfiguration:
+                    description: NTPConfiguration defines the NTP configuration on
+                      the host OS.
+                    properties:
+                      servers:
+                        description: Servers defines a list of NTP servers to be configured
+                          on the host OS.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - servers
+                    type: object
+                type: object
               osFamily:
                 type: string
               templateRef:
@@ -4401,7 +5432,7 @@ spec:
               users:
                 items:
                   description: UserConfiguration defines the configuration of the
-                    user to be added to the VM
+                    user to be added to the VM.
                   properties:
                     name:
                       type: string
@@ -4415,11 +5446,12 @@ spec:
                   type: object
                 type: array
             required:
+            - hardwareSelector
             - osFamily
             type: object
           status:
             description: TinkerbellMachineConfigStatus defines the observed state
-              of TinkerbellMachineConfig
+              of TinkerbellMachineConfig.
             type: object
         type: object
     served: true
@@ -4453,7 +5485,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: TinkerbellTemplateConfig is the Schema for the TinkerbellTemplateConfigs
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -4469,7 +5501,7 @@ spec:
             type: object
           spec:
             description: TinkerbellTemplateConfigSpec defines the desired state of
-              TinkerbellTemplateConfig
+              TinkerbellTemplateConfig.
             properties:
               template:
                 description: Template defines a Tinkerbell workflow template with
@@ -4558,7 +5590,7 @@ spec:
             type: object
           status:
             description: TinkerbellTemplateConfigStatus defines the observed state
-              of TinkerbellTemplateConfig
+              of TinkerbellTemplateConfig.
             type: object
         type: object
     served: true
@@ -4592,7 +5624,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: VSphereDatacenterConfig is the Schema for the VSphereDatacenterConfigs
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -4608,10 +5640,12 @@ spec:
             type: object
           spec:
             description: VSphereDatacenterConfigSpec defines the desired state of
-              VSphereDatacenterConfig
+              VSphereDatacenterConfig.
             properties:
               datacenter:
                 type: string
+              disableCSI:
+                type: boolean
               insecure:
                 type: boolean
               network:
@@ -4629,7 +5663,7 @@ spec:
             type: object
           status:
             description: VSphereDatacenterConfigStatus defines the observed state
-              of VSphereDatacenterConfig
+              of VSphereDatacenterConfig.
             properties:
               failureMessage:
                 description: FailureMessage indicates that there is a fatal problem
@@ -4677,7 +5711,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: VSphereMachineConfig is the Schema for the vspheremachineconfigs
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -4692,14 +5726,86 @@ spec:
           metadata:
             type: object
           spec:
-            description: VSphereMachineConfigSpec defines the desired state of VSphereMachineConfig
+            description: VSphereMachineConfigSpec defines the desired state of VSphereMachineConfig.
             properties:
+              cloneMode:
+                description: CloneMode describes the clone mode to be used when cloning
+                  vSphere VMs.
+                enum:
+                - fullClone
+                - linkedClone
+                type: string
               datastore:
                 type: string
               diskGiB:
                 type: integer
               folder:
                 type: string
+              hostOSConfiguration:
+                description: HostOSConfiguration defines the configuration settings
+                  on the host OS.
+                properties:
+                  bottlerocketConfiguration:
+                    description: BottlerocketConfiguration defines the Bottlerocket
+                      configuration on the host OS. These settings only take effect
+                      when the `osFamily` is bottlerocket.
+                    properties:
+                      boot:
+                        description: Boot defines the boot settings for bottlerocket.
+                        properties:
+                          bootKernelParameters:
+                            additionalProperties:
+                              items:
+                                type: string
+                              type: array
+                            type: object
+                        type: object
+                      kernel:
+                        description: Kernel defines the kernel settings for bottlerocket.
+                        properties:
+                          sysctlSettings:
+                            additionalProperties:
+                              type: string
+                            description: SysctlSettings defines the kernel sysctl
+                              settings to set for bottlerocket nodes.
+                            type: object
+                        type: object
+                      kubernetes:
+                        description: Kubernetes defines the Kubernetes settings on
+                          the host OS.
+                        properties:
+                          allowedUnsafeSysctls:
+                            description: AllowedUnsafeSysctls defines the list of
+                              unsafe sysctls that can be set on a node.
+                            items:
+                              type: string
+                            type: array
+                          clusterDNSIPs:
+                            description: ClusterDNSIPs defines IP addresses of the
+                              DNS servers.
+                            items:
+                              type: string
+                            type: array
+                          maxPods:
+                            description: MaxPods defines the maximum number of pods
+                              that can run on a node.
+                            type: integer
+                        type: object
+                    type: object
+                  ntpConfiguration:
+                    description: NTPConfiguration defines the NTP configuration on
+                      the host OS.
+                    properties:
+                      servers:
+                        description: Servers defines a list of NTP servers to be configured
+                          on the host OS.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - servers
+                    type: object
+                type: object
               memoryMiB:
                 type: integer
               numCPUs:
@@ -4710,12 +5816,16 @@ spec:
                 type: string
               storagePolicyName:
                 type: string
+              tags:
+                items:
+                  type: string
+                type: array
               template:
                 type: string
               users:
                 items:
                   description: UserConfiguration defines the configuration of the
-                    user to be added to the VM
+                    user to be added to the VM.
                   properties:
                     name:
                       type: string
@@ -4738,7 +5848,7 @@ spec:
             type: object
           status:
             description: VSphereMachineConfigStatus defines the observed state of
-              VSphereMachineConfig
+              VSphereMachineConfig.
             type: object
         type: object
     served: true
@@ -4797,11 +5907,49 @@ rules:
   - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  creationTimestamp: null
+  name: eksa-manager-role
+  namespace: eksa-system
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
   name: eksa-manager-role
 rules:
+- apiGroups:
+  - addons.cluster.x-k8s.io
+  resources:
+  - clusterresourcesets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - anywhere.eks.amazonaws.com
+  resources:
+  - awsiamconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 - apiGroups:
   - anywhere.eks.amazonaws.com
   resources:
@@ -4811,6 +5959,12 @@ rules:
   - cloudstackmachineconfigs
   - clusters
   - dockerdatacenterconfigs
+  - nutanixdatacenterconfigs
+  - nutanixmachineconfigs
+  - snowippools
+  - snowmachineconfigs
+  - tinkerbelldatacenterconfigs
+  - tinkerbellmachineconfigs
   - vspheredatacenterconfigs
   - vspheremachineconfigs
   verbs:
@@ -4830,6 +5984,10 @@ rules:
   - cloudstackmachineconfigs/finalizers
   - clusters/finalizers
   - dockerdatacenterconfigs/finalizers
+  - snowippools/finalizers
+  - snowmachineconfigs/finalizers
+  - tinkerbelldatacenterconfigs/finalizers
+  - tinkerbellmachineconfigs/finalizers
   - vspheredatacenterconfigs/finalizers
   - vspheremachineconfigs/finalizers
   verbs:
@@ -4843,6 +6001,10 @@ rules:
   - cloudstackmachineconfigs/status
   - clusters/status
   - dockerdatacenterconfigs/status
+  - snowippools/status
+  - snowmachineconfigs/status
+  - tinkerbelldatacenterconfigs/status
+  - tinkerbellmachineconfigs/status
   - vspheredatacenterconfigs/status
   - vspheremachineconfigs/status
   verbs:
@@ -4852,7 +6014,88 @@ rules:
 - apiGroups:
   - anywhere.eks.amazonaws.com
   resources:
+  - fluxconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - anywhere.eks.amazonaws.com
+  resources:
+  - gitopsconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - anywhere.eks.amazonaws.com
+  resources:
   - oidcconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - anywhere.eks.amazonaws.com
+  resources:
+  - snowdatacenterconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - anywhere.eks.amazonaws.com
+  resources:
+  - snowmachineconfigs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - bmc.tinkerbell.org
+  resources:
+  - machines
+  - machines/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - clusterctl.cluster.x-k8s.io
+  resources:
+  - providers
   verbs:
   - get
   - list
@@ -4864,6 +6107,51 @@ rules:
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - infrastructure.cluster.x-k8s.io
+  resources:
+  - awssnowclusters
+  - awssnowippools
+  - awssnowmachinetemplates
+  - cloudstackclusters
+  - cloudstackmachinetemplates
+  - dockerclusters
+  - dockermachinetemplates
+  - tinkerbellclusters
+  - tinkerbellmachinetemplates
+  - vsphereclusters
+  - vspheremachinetemplates
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - packages.eks.amazonaws.com
+  resources:
+  - packages
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - tinkerbell.org
+  resources:
+  - hardware
+  - hardware/status
+  verbs:
+  - get
+  - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - etcdcluster.cluster.x-k8s.io
@@ -4938,6 +6226,10 @@ rules:
   - dockerclusters/status
   - dockermachinetemplates
   - dockermachinetemplates/status
+  - nutanixclusters
+  - nutanixclusters/status
+  - nutanixmachinetemplates
+  - nutanixmachinetemplates/status
   verbs:
   - get
   - list
@@ -5058,24 +6350,6 @@ rules:
   - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: eksa-proxy-role
-rules:
-- apiGroups:
-  - authentication.k8s.io
-  resources:
-  - tokenreviews
-  verbs:
-  - create
-- apiGroups:
-  - authorization.k8s.io
-  resources:
-  - subjectaccessreviews
-  verbs:
-  - create
----
-apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: eksa-leader-election-rolebinding
@@ -5084,6 +6358,20 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: eksa-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: eksa-controller-manager
+  namespace: eksa-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eksa-manager-rolebinding
+  namespace: eksa-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: eksa-manager-role
 subjects:
 - kind: ServiceAccount
   name: eksa-controller-manager
@@ -5101,34 +6389,6 @@ subjects:
 - kind: ServiceAccount
   name: eksa-controller-manager
   namespace: eksa-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: eksa-proxy-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: eksa-proxy-role
-subjects:
-- kind: ServiceAccount
-  name: eksa-controller-manager
-  namespace: eksa-system
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    control-plane: controller-manager
-  name: eksa-controller-manager-metrics-service
-  namespace: eksa-system
-spec:
-  ports:
-  - name: https
-    port: 8443
-    targetPort: https
-  selector:
-    control-plane: controller-manager
 ---
 apiVersion: v1
 kind: Service
@@ -5161,8 +6421,6 @@ spec:
     spec:
       containers:
       - args:
-        - --health-probe-bind-address=:8081
-        - --metrics-bind-address=127.0.0.1:8080
         - --leader-elect
         image: public.ecr.aws/l0g8r8j6/eks-anywhere-cluster-controller:v0.0.0-eks-a-v0.0.0-dev-build.251
         imagePullPolicy: Always
@@ -5182,20 +6440,13 @@ spec:
           httpGet:
             path: /readyz
             port: healthz
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
         volumeMounts:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
-      - args:
-        - --secure-listen-address=0.0.0.0:8443
-        - --upstream=http://127.0.0.1:8080/
-        - --logtostderr=true
-        - --v=10
-        image: public.ecr.aws/l0g8r8j6/brancz/kube-rbac-proxy:v0.8.0-eks-a-v0.0.0-dev-build.251
-        name: kube-rbac-proxy
-        ports:
-        - containerPort: 8443
-          name: https
       securityContext:
         fsGroup: 1000
       serviceAccountName: eksa-controller-manager
@@ -5203,6 +6454,8 @@ spec:
       tolerations:
       - effect: NoSchedule
         key: node-role.kubernetes.io/master
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/control-plane
       volumes:
       - name: cert
         secret:
@@ -5230,6 +6483,161 @@ metadata:
   namespace: eksa-system
 spec:
   selfSigned: {}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: eksa-system/eksa-serving-cert
+  name: eksa-mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /mutate-anywhere-eks-amazonaws-com-v1alpha1-awsiamconfig
+  failurePolicy: Fail
+  name: mutation.awsiamconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - awsiamconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /mutate-anywhere-eks-amazonaws-com-v1alpha1-cloudstackdatacenterconfig
+  failurePolicy: Fail
+  name: mutation.cloudstackdatacenterconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - cloudstackdatacenterconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /mutate-anywhere-eks-amazonaws-com-v1alpha1-cluster
+  failurePolicy: Fail
+  name: mutation.cluster.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - clusters
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /mutate-anywhere-eks-amazonaws-com-v1alpha1-snowmachineconfig
+  failurePolicy: Fail
+  name: mutation.snowmachineconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - snowmachineconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /mutate-anywhere-eks-amazonaws-com-v1alpha1-tinkerbellmachineconfig
+  failurePolicy: Fail
+  name: mutation.tinkerbellmachineconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - tinkerbellmachineconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /mutate-anywhere-eks-amazonaws-com-v1alpha1-vspheredatacenterconfig
+  failurePolicy: Fail
+  name: mutation.vspheredatacenterconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - vspheredatacenterconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /mutate-anywhere-eks-amazonaws-com-v1alpha1-vspheremachineconfig
+  failurePolicy: Fail
+  name: mutation.vspheremachineconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - vspheremachineconfigs
+  sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -5371,6 +6779,48 @@ webhooks:
     service:
       name: eksa-webhook-service
       namespace: eksa-system
+      path: /validate-anywhere-eks-amazonaws-com-v1alpha1-nutanixdatacenterconfig
+  failurePolicy: Fail
+  name: validation.nutanixdatacenterconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - nutanixdatacenterconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /validate-anywhere-eks-amazonaws-com-v1alpha1-nutanixmachineconfig
+  failurePolicy: Fail
+  name: validation.nutanixmachineconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - nutanixmachineconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
       path: /validate-anywhere-eks-amazonaws-com-v1alpha1-oidcconfig
   failurePolicy: Fail
   name: validation.oidcconfig.anywhere.amazonaws.com
@@ -5384,6 +6834,111 @@ webhooks:
     - UPDATE
     resources:
     - oidcconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /validate-anywhere-eks-amazonaws-com-v1alpha1-snowdatacenterconfig
+  failurePolicy: Fail
+  name: snowdatacenterconfig.kb.io
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - snowdatacenterconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /validate-anywhere-eks-amazonaws-com-v1alpha1-snowippool
+  failurePolicy: Fail
+  name: validation.snowippool.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - snowippools
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /validate-anywhere-eks-amazonaws-com-v1alpha1-snowmachineconfig
+  failurePolicy: Fail
+  name: validation.snowmachineconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - snowmachineconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /validate-anywhere-eks-amazonaws-com-v1alpha1-tinkerbelldatacenterconfig
+  failurePolicy: Fail
+  name: validation.tinkerbelldatacenterconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - tinkerbelldatacenterconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: eksa-webhook-service
+      namespace: eksa-system
+      path: /validate-anywhere-eks-amazonaws-com-v1alpha1-tinkerbellmachineconfig
+  failurePolicy: Fail
+  name: validation.tinkerbellmachineconfig.anywhere.amazonaws.com
+  rules:
+  - apiGroups:
+    - anywhere.eks.amazonaws.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - tinkerbellmachineconfigs
   sideEffects: None
 - admissionReviewVersions:
   - v1

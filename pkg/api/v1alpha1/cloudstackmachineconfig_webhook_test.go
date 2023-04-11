@@ -1,40 +1,17 @@
 package v1alpha1_test
 
 import (
-	"os"
 	"testing"
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/aws/eks-anywhere/pkg/api/v1alpha1"
-	"github.com/aws/eks-anywhere/pkg/features"
 )
 
-func TestCloudStackMachineConfigValidateCreateFeatureDisabled(t *testing.T) {
-	oldCloudstackProviderFeatureValue := os.Getenv(features.CloudStackProviderEnvVar)
-	err := os.Unsetenv(features.CloudStackProviderEnvVar)
-	if err != nil {
-		return
-	}
-	defer os.Setenv(features.CloudStackProviderEnvVar, oldCloudstackProviderFeatureValue)
-
-	c := cloudstackMachineConfig()
-	g := NewWithT(t)
-	g.Expect(c.ValidateCreate()).NotTo(Succeed())
-}
-
 func TestCloudStackMachineConfigValidateCreateValidDiskOffering(t *testing.T) {
-	oldCloudstackProviderFeatureValue := os.Getenv(features.CloudStackProviderEnvVar)
-	err := os.Setenv(features.CloudStackProviderEnvVar, "true")
-	if err != nil {
-		return
-	}
-	defer os.Setenv(features.CloudStackProviderEnvVar, oldCloudstackProviderFeatureValue)
-
-	features.ClearCache()
 	c := cloudstackMachineConfig()
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "DiskOffering",
 		},
@@ -48,16 +25,8 @@ func TestCloudStackMachineConfigValidateCreateValidDiskOffering(t *testing.T) {
 }
 
 func TestCloudStackMachineConfigValidateCreateInvalidDiskOfferingBadMountPath(t *testing.T) {
-	oldCloudstackProviderFeatureValue := os.Getenv(features.CloudStackProviderEnvVar)
-	err := os.Setenv(features.CloudStackProviderEnvVar, "true")
-	if err != nil {
-		return
-	}
-	defer os.Setenv(features.CloudStackProviderEnvVar, oldCloudstackProviderFeatureValue)
-
-	features.ClearCache()
 	c := cloudstackMachineConfig()
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "DiskOffering",
 		},
@@ -71,16 +40,8 @@ func TestCloudStackMachineConfigValidateCreateInvalidDiskOfferingBadMountPath(t 
 }
 
 func TestCloudStackMachineConfigValidateCreateInvalidDiskOfferingEmptyDevice(t *testing.T) {
-	oldCloudstackProviderFeatureValue := os.Getenv(features.CloudStackProviderEnvVar)
-	err := os.Setenv(features.CloudStackProviderEnvVar, "true")
-	if err != nil {
-		return
-	}
-	defer os.Setenv(features.CloudStackProviderEnvVar, oldCloudstackProviderFeatureValue)
-
-	features.ClearCache()
 	c := cloudstackMachineConfig()
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "DiskOffering",
 		},
@@ -94,16 +55,8 @@ func TestCloudStackMachineConfigValidateCreateInvalidDiskOfferingEmptyDevice(t *
 }
 
 func TestCloudStackMachineConfigValidateCreateInvalidDiskOfferingEmptyFilesystem(t *testing.T) {
-	oldCloudstackProviderFeatureValue := os.Getenv(features.CloudStackProviderEnvVar)
-	err := os.Setenv(features.CloudStackProviderEnvVar, "true")
-	if err != nil {
-		return
-	}
-	defer os.Setenv(features.CloudStackProviderEnvVar, oldCloudstackProviderFeatureValue)
-
-	features.ClearCache()
 	c := cloudstackMachineConfig()
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "DiskOffering",
 		},
@@ -117,16 +70,8 @@ func TestCloudStackMachineConfigValidateCreateInvalidDiskOfferingEmptyFilesystem
 }
 
 func TestCloudStackMachineConfigValidateCreateInvalidDiskOfferingEmptyLabel(t *testing.T) {
-	oldCloudstackProviderFeatureValue := os.Getenv(features.CloudStackProviderEnvVar)
-	err := os.Setenv(features.CloudStackProviderEnvVar, "true")
-	if err != nil {
-		return
-	}
-	defer os.Setenv(features.CloudStackProviderEnvVar, oldCloudstackProviderFeatureValue)
-
-	features.ClearCache()
 	c := cloudstackMachineConfig()
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "DiskOffering",
 		},
@@ -135,6 +80,83 @@ func TestCloudStackMachineConfigValidateCreateInvalidDiskOfferingEmptyLabel(t *t
 		Filesystem: "ext4",
 		Label:      "",
 	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateCreate()).NotTo(Succeed())
+}
+
+func TestCloudStackMachineConfigValidateCreateValidSymlinks(t *testing.T) {
+	c := cloudstackMachineConfig()
+	c.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/lib.a": "/_data/var-redirect/log.d",
+	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateCreate()).To(Succeed())
+}
+
+func TestCloudStackMachineConfigValidateCreateInvalidSymlinksColon(t *testing.T) {
+	c := cloudstackMachineConfig()
+	c.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/lib:a": "/_data/var-redirect/log:d",
+	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateCreate()).NotTo(Succeed())
+}
+
+func TestCloudStackMachineConfigValidateCreateInvalidSymlinksComma(t *testing.T) {
+	c := cloudstackMachineConfig()
+	c.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/lib:a": "/_data/var-redirect/log,d",
+	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateCreate()).NotTo(Succeed())
+}
+
+func TestCloudStackMachineConfigValidateCreateInvalidSymlinksKeyNotStartWithRoot(t *testing.T) {
+	c := cloudstackMachineConfig()
+	c.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"var/lib": "/data/var/log",
+	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateCreate()).NotTo(Succeed())
+}
+
+func TestCloudStackMachineConfigValidateCreateInvalidSymlinksValueNotStartWithRoot(t *testing.T) {
+	c := cloudstackMachineConfig()
+	c.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/lib": "data/var/log",
+	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateCreate()).NotTo(Succeed())
+}
+
+func TestCloudStackMachineConfigValidateCreateInvalidSymlinksKeyEndWithRoot(t *testing.T) {
+	c := cloudstackMachineConfig()
+	c.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/lib/": "/data/var/log",
+	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateCreate()).NotTo(Succeed())
+}
+
+func TestCloudStackMachineConfigValidateCreateInvalidSymlinksValueEndWithRoot(t *testing.T) {
+	c := cloudstackMachineConfig()
+	c.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/lib": "/data/var/log/",
+	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateCreate()).NotTo(Succeed())
+}
+
+func TestCloudStackMachineConfigValidateCreateInvalidTemplateEmpty(t *testing.T) {
+	c := cloudstackMachineConfig()
+	c.Spec.Template = v1alpha1.CloudStackResourceIdentifier{}
+	g := NewWithT(t)
+	g.Expect(c.ValidateCreate()).NotTo(Succeed())
+}
+
+func TestCloudStackMachineConfigValidateCreateInvalidComputeOfferingEmpty(t *testing.T) {
+	c := cloudstackMachineConfig()
+	c.Spec.ComputeOffering = v1alpha1.CloudStackResourceIdentifier{}
 	g := NewWithT(t)
 	g.Expect(c.ValidateCreate()).NotTo(Succeed())
 }
@@ -186,7 +208,7 @@ func TestCPCloudStackMachineValidateUpdateComputeOfferingMutable(t *testing.T) {
 func TestCPCloudStackMachineValidateUpdateDiskOfferingMutable(t *testing.T) {
 	vOld := cloudstackMachineConfig()
 	vOld.SetControlPlane()
-	vOld.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	vOld.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "oldDiskOffering",
 		},
@@ -197,7 +219,7 @@ func TestCPCloudStackMachineValidateUpdateDiskOfferingMutable(t *testing.T) {
 	}
 	c := vOld.DeepCopy()
 
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "newDiskOffering",
 		},
@@ -213,7 +235,7 @@ func TestCPCloudStackMachineValidateUpdateDiskOfferingMutable(t *testing.T) {
 func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailInvalidMountPath(t *testing.T) {
 	vOld := cloudstackMachineConfig()
 	vOld.SetControlPlane()
-	vOld.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	vOld.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "oldDiskOffering",
 		},
@@ -224,7 +246,7 @@ func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailInvalidMountPat
 	}
 	c := vOld.DeepCopy()
 
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "newDiskOffering",
 		},
@@ -240,7 +262,7 @@ func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailInvalidMountPat
 func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailEmptyDevice(t *testing.T) {
 	vOld := cloudstackMachineConfig()
 	vOld.SetControlPlane()
-	vOld.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	vOld.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "oldDiskOffering",
 		},
@@ -251,7 +273,7 @@ func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailEmptyDevice(t *
 	}
 	c := vOld.DeepCopy()
 
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "newDiskOffering",
 		},
@@ -267,7 +289,7 @@ func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailEmptyDevice(t *
 func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailEmptyFilesystem(t *testing.T) {
 	vOld := cloudstackMachineConfig()
 	vOld.SetControlPlane()
-	vOld.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	vOld.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "oldDiskOffering",
 		},
@@ -278,7 +300,7 @@ func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailEmptyFilesystem
 	}
 	c := vOld.DeepCopy()
 
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "newDiskOffering",
 		},
@@ -294,7 +316,7 @@ func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailEmptyFilesystem
 func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailEmptyLabel(t *testing.T) {
 	vOld := cloudstackMachineConfig()
 	vOld.SetControlPlane()
-	vOld.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	vOld.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "oldDiskOffering",
 		},
@@ -305,7 +327,7 @@ func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailEmptyLabel(t *t
 	}
 	c := vOld.DeepCopy()
 
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "newDiskOffering",
 		},
@@ -313,6 +335,51 @@ func TestCPCloudStackMachineValidateUpdateDiskOfferingMutableFailEmptyLabel(t *t
 		Device:     "/dev/vdb",
 		Filesystem: "ext4",
 		Label:      "",
+	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateUpdate(&vOld)).NotTo(Succeed())
+}
+
+func TestCPCloudStackMachineValidateUpdateSymlinksMutable(t *testing.T) {
+	vOld := cloudstackMachineConfig()
+	vOld.SetControlPlane()
+	vOld.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/log": "/data/var/log",
+	}
+	c := vOld.DeepCopy()
+
+	c.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/log": "/data_2/var/log",
+	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateUpdate(&vOld)).To(Succeed())
+}
+
+func TestCPCloudStackMachineValidateUpdateSymlinksMutableInvalidComma(t *testing.T) {
+	vOld := cloudstackMachineConfig()
+	vOld.SetControlPlane()
+	vOld.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/log": "/data/var/log",
+	}
+	c := vOld.DeepCopy()
+
+	c.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/log": "/data_2/var/log,d",
+	}
+	g := NewWithT(t)
+	g.Expect(c.ValidateUpdate(&vOld)).NotTo(Succeed())
+}
+
+func TestCPCloudStackMachineValidateUpdateSymlinksMutableColon(t *testing.T) {
+	vOld := cloudstackMachineConfig()
+	vOld.SetControlPlane()
+	vOld.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/log": "/data/var/log",
+	}
+	c := vOld.DeepCopy()
+
+	c.Spec.Symlinks = v1alpha1.SymlinkMaps{
+		"/var/log": "/data_2/var/log:d",
 	}
 	g := NewWithT(t)
 	g.Expect(c.ValidateUpdate(&vOld)).NotTo(Succeed())
@@ -334,7 +401,7 @@ func TestWorkersCPCloudStackMachineValidateUpdateComputeOfferingMutable(t *testi
 
 func TestWorkersCPCloudStackMachineValidateUpdateDiskOfferingMutable(t *testing.T) {
 	vOld := cloudstackMachineConfig()
-	vOld.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	vOld.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "oldDiskOffering",
 		},
@@ -342,7 +409,7 @@ func TestWorkersCPCloudStackMachineValidateUpdateDiskOfferingMutable(t *testing.
 	}
 	c := vOld.DeepCopy()
 
-	c.Spec.DiskOffering = v1alpha1.CloudStackResourceDiskOffering{
+	c.Spec.DiskOffering = &v1alpha1.CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: v1alpha1.CloudStackResourceIdentifier{
 			Name: "newDiskOffering",
 		},
@@ -415,8 +482,15 @@ func cloudstackMachineConfig() v1alpha1.CloudStackMachineConfig {
 	return v1alpha1.CloudStackMachineConfig{
 		TypeMeta:   metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{Annotations: make(map[string]string, 2)},
-		Spec:       v1alpha1.CloudStackMachineConfigSpec{},
-		Status:     v1alpha1.CloudStackMachineConfigStatus{},
+		Spec: v1alpha1.CloudStackMachineConfigSpec{
+			Template: v1alpha1.CloudStackResourceIdentifier{
+				Name: "template1",
+			},
+			ComputeOffering: v1alpha1.CloudStackResourceIdentifier{
+				Name: "offering1",
+			},
+		},
+		Status: v1alpha1.CloudStackMachineConfigStatus{},
 	}
 }
 

@@ -7,15 +7,16 @@ import (
 	"io"
 	"os"
 
-	pbnjv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/pbnj/api/v1alpha1"
-	tinkv1alpha1 "github.com/tinkerbell/cluster-api-provider-tinkerbell/tink/api/v1alpha1"
+	rufiov1alpha1 "github.com/tinkerbell/rufio/api/v1alpha1"
+	tinkv1alpha1 "github.com/tinkerbell/tink/pkg/apis/core/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
-)
 
-const Provisioning = "provisioning"
+	eksav1alpha1 "github.com/aws/eks-anywhere/pkg/api/v1alpha1"
+	"github.com/aws/eks-anywhere/pkg/templater"
+)
 
 // Indexer provides indexing behavior for objects.
 type Indexer interface {
@@ -25,6 +26,8 @@ type Indexer interface {
 	Insert(v interface{}) error
 	// IndexField associated index with fn such that Lookup may be used to retrieve objects.
 	IndexField(index string, fn KeyExtractorFunc)
+	// Remove deletes v from the index.
+	Remove(v interface{}) error
 }
 
 // Catalogue represents a catalogue of Tinkerbell hardware manifests to be used with Tinkerbells
@@ -33,7 +36,7 @@ type Catalogue struct {
 	hardware      []*tinkv1alpha1.Hardware
 	hardwareIndex Indexer
 
-	bmcs     []*pbnjv1alpha1.BMC
+	bmcs     []*rufiov1alpha1.Machine
 	bmcIndex Indexer
 
 	secrets     []*corev1.Secret
@@ -47,7 +50,7 @@ type CatalogueOption func(*Catalogue)
 func NewCatalogue(opts ...CatalogueOption) *Catalogue {
 	catalogue := &Catalogue{
 		hardwareIndex: NewFieldIndexer(&tinkv1alpha1.Hardware{}),
-		bmcIndex:      NewFieldIndexer(&pbnjv1alpha1.BMC{}),
+		bmcIndex:      NewFieldIndexer(&rufiov1alpha1.Machine{}),
 		secretIndex:   NewFieldIndexer(&corev1.Secret{}),
 	}
 
@@ -68,7 +71,7 @@ func ParseYAMLCatalogueFromFile(catalogue *Catalogue, filename string) error {
 	return ParseYAMLCatalogue(catalogue, fh)
 }
 
-// ParseCatalogue parses a YAML document, r, that represents a set of Kubernetes manifests.
+// ParseYAMLCatalogue parses a YAML document, r, that represents a set of Kubernetes manifests.
 // Manifests parsed include CAPT Hardware, PBnJ BMCs and associated Core API Secret.
 func ParseYAMLCatalogue(catalogue *Catalogue, r io.Reader) error {
 	document := yamlutil.NewYAMLReader(bufio.NewReader(r))
@@ -91,7 +94,7 @@ func ParseYAMLCatalogue(catalogue *Catalogue, r io.Reader) error {
 			if err := catalogueSerializedHardware(catalogue, manifest); err != nil {
 				return err
 			}
-		case "BMC":
+		case "Machine":
 			if err := catalogueSerializedBMC(catalogue, manifest); err != nil {
 				return err
 			}
@@ -115,7 +118,7 @@ func catalogueSerializedHardware(catalogue *Catalogue, manifest []byte) error {
 }
 
 func catalogueSerializedBMC(catalogue *Catalogue, manifest []byte) error {
-	var bmc pbnjv1alpha1.BMC
+	var bmc rufiov1alpha1.Machine
 	if err := yaml.UnmarshalStrict(manifest, &bmc); err != nil {
 		return fmt.Errorf("unable to parse bmc manifest: %v", err)
 	}
@@ -134,4 +137,37 @@ func catalogueSerializedSecret(catalogue *Catalogue, manifest []byte) error {
 		return err
 	}
 	return nil
+}
+
+// MarshalCatalogue marshals c into YAML that can be submitted to a Kubernetes cluster.
+func MarshalCatalogue(c *Catalogue) ([]byte, error) {
+	var marshallables []eksav1alpha1.Marshallable
+	for _, hw := range c.AllHardware() {
+		marshallables = append(marshallables, hw)
+	}
+	for _, bmc := range c.AllBMCs() {
+		marshallables = append(marshallables, bmc)
+	}
+	for _, secret := range c.AllSecrets() {
+		marshallables = append(marshallables, secret)
+	}
+	resources := make([][]byte, 0, len(marshallables))
+	for _, marshallable := range marshallables {
+		resource, err := yaml.Marshal(marshallable)
+		if err != nil {
+			return nil, fmt.Errorf("failed marshalling resource for hardware spec: %v", err)
+		}
+		resources = append(resources, resource)
+	}
+	return templater.AppendYamlResources(resources...), nil
+}
+
+// NewMachineCatalogueWriter creates a MachineWriter instance that writes Machine instances to
+// catalogue including its Machine and Secret data.
+func NewMachineCatalogueWriter(catalogue *Catalogue) MachineWriter {
+	return MultiMachineWriter(
+		NewHardwareCatalogueWriter(catalogue),
+		NewBMCCatalogueWriter(catalogue),
+		NewSecretCatalogueWriter(catalogue),
+	)
 }

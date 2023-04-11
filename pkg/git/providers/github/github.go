@@ -40,6 +40,7 @@ type Options struct {
 type GithubClient interface {
 	GetRepo(ctx context.Context, opts git.GetRepoOpts) (repo *git.Repository, err error)
 	CreateRepo(ctx context.Context, opts git.CreateRepoOpts) (repo *git.Repository, err error)
+	AddDeployKeyToRepo(ctx context.Context, opts git.AddDeployKeyOpts) error
 	AuthenticatedUser(ctx context.Context) (*goGithub.User, error)
 	Organization(ctx context.Context, org string) (*goGithub.Organization, error)
 	GetAccessTokenPermissions(accessToken string) (string, error)
@@ -80,7 +81,11 @@ func (g *githubProvider) GetRepo(ctx context.Context) (*git.Repository, error) {
 	return repo, err
 }
 
-// validates the github setup and access
+func (g *githubProvider) AddDeployKeyToRepo(ctx context.Context, opts git.AddDeployKeyOpts) error {
+	return g.githubProviderClient.AddDeployKeyToRepo(ctx, opts)
+}
+
+// validates the github setup and access.
 func (g *githubProvider) Validate(ctx context.Context) error {
 	user, err := g.githubProviderClient.AuthenticatedUser(ctx)
 	if err != nil {

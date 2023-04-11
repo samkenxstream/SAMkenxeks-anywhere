@@ -21,16 +21,16 @@ To learn more about Amazon EKS, see [Amazon Elastic Kubernetes Service](https://
 
 ### Comparing Amazon EKS Anywhere to Amazon EKS
 
-| Feature                       | Amazon EKS Anywhere                  | Amazon EKS                      |
-|-------------------------------|--------------------------------------|---------------------------------|
-| **Control plane** |||
+| Feature                 | Amazon EKS Anywhere | Amazon EKS                      |
+|-------------------------|---------------------|---------------------------------|
+| **Control plane** ||||
 | K8s control plane management      | Managed by customer                  | Managed by AWS                  |
-| K8s control plane location        | Customer's datacenter                | AWS cloud                       |
-| Cluster updates        | Manual CLI updates for control plane. Flux supported rolling updates for data plane.                | Managed in-place updates for control plane and managed rolling updates for data plane.                       |
+| K8s control plane location        | Customer's datacenter                 | AWS cloud                       |
+| Cluster updates        | Manual CLI updates for control plane. Flux supported rolling updates for data plane | Managed in-place updates for control plane and managed rolling updates for data plane.                       |
 ||||
 | **Compute** |||
-| Compute options | VMware vSphere | Amazon EC2, AWS Fargate | 
-| Supported node operating systems   | BottleRocket, Ubuntu          | Amazon Linux 2, Windows Server, Bottlerocket, Ubuntu |
+| Compute options | CloudStack, VMware vSphere, Bare Metal servers | Amazon EC2, AWS Fargate | 
+| Supported node operating systems   | Bottlerocket, Ubuntu, and RHEL         | Amazon Linux 2, Windows Server, Bottlerocket, Ubuntu |
 | Physical hardware (servers, network equipment, storage, etc.) | Managed by customer | Managed by AWS |
 | Serverless | Not supported | Amazon EKS on AWS Fargate |
 ||||
@@ -39,15 +39,35 @@ To learn more about Amazon EKS, see [Amazon Elastic Kubernetes Service](https://
 | Console view for Kubernetes objects | Optional EKS console connection using EKS Connector (public preview) | Native EKS console connection|
 | Infrastructure-as-code        | Cluster manifest, Kubernetes controllers, [3rd-party solutions](https://aws.amazon.com/eks/eks-anywhere/partners/)            | AWS CloudFormation, [3rd-party solutions](https://aws.amazon.com/eks/partners/) |
 | Logging and monitoring        | [3rd-party solutions](https://aws.amazon.com/eks/eks-anywhere/partners/)            | CloudWatch, CloudTrail, [3rd-party solutions](https://aws.amazon.com/eks/partners/) |
-| GitOps                        | Flux controller                      | Flux controller                 |
+| GitOps                        | Flux controller | Flux controller                 |
 ||||
 | **Functions and tooling** | | |
 | Networking and Security       | Cilium CNI and network policy supported | Amazon VPC CNI supported. Calico supported for network policy. Other compatible [3rd-party CNI plugins](https://docs.aws.amazon.com/eks/latest/userguide/alternate-cni-plugins.html) available.|
-| Load balancer                 | [3rd-party solutions](https://aws.amazon.com/eks/eks-anywhere/partners/)  | Elastic Load Balancing including Application Load Balancer (ALB), and Network Load Balancer (NLB) |
-| Service mesh                  | Community or [3rd-party solutions](https://aws.amazon.com/eks/eks-anywhere/partners/)   | AWS App Mesh, community, or [3rd-party solutions](https://aws.amazon.com/eks/partners/) |
-| Community tools and Helm | Works with compatible community tooling and helm charts. | Works with compatible community tooling and helm charts. |
+| Load balancer                 | Metallb | Elastic Load Balancing including Application Load Balancer (ALB), and Network Load Balancer (NLB) |
+| Service mesh                  | Community or [3rd-party solutions](https://aws.amazon.com/eks/eks-anywhere/partners/)    | AWS App Mesh, community, or [3rd-party solutions](https://aws.amazon.com/eks/partners/) |
+| Community tools and Helm      | Works with compatible community tooling and helm charts.  | Works with compatible community tooling and helm charts. |
 ||||
 | **Pricing and support** |||
 | Control plane pricing                       | Free to download, paid support subscription option  | Hourly pricing per cluster |
 | AWS Support                       | Additional annual subscription (per cluster) for AWS support | Basic support included. Included in paid AWS support plans (developer, business, and enterprise)  |
 ||||
+
+### Comparing Amazon EKS Anywhere to Amazon EKS on Outposts
+
+Like EKS Anywhere, Amazon EKS on Outposts provides a means of running Kubernetes clusters using EKS software on-premises.
+The main differences are that:
+
+* Amazon provides the hardware with Outposts, while most EKS Anywhere providers leverage the customer's own hardware.
+* With Amazon EKS on Outposts, the Kubernetes control plane is fully managed by AWS. With EKS Anywhere, customers are responsible for managing the lifecycle of the Kubernetes control plane with EKS Anywhere automation tooling.
+* Customers can use Amazon EKS on Outposts with the same console, APIs, and tools they use to run Amazon EKS clusters in AWS Cloud. With EKS Anywhere, customers can use the eksctl CLI to manage their clusters, optionally connect their clusters to the EKS console for observability, and optionally use infrastructure as code tools such as Terraform and GitOps to manage their clusters. However, the primary interfaces for EKS Anywhere are the EKS Anywhere Custom Resources. Amazon EKS does not have a CRD-based interface today.
+* Amazon EKS on Outposts is a regional AWS service that requires a consistent, reliable connection from the Outpost to the AWS Region.
+EKS Anywhere is a standalone software offering that can run entirely disconnected from AWS Cloud, including air-gapped environments.
+
+Outposts have two deployment methods available:
+
+* **Extended clusters**: With extended clusters, the Kubernetes control plane runs in an AWS Region, while Kubernetes nodes run on Outpost hardware.
+
+* **Local clusters**: With local clusters, both the Kubernetes control plane and nodes run on Outpost hardware.
+
+For more information, see [Amazon EKS on AWS Outposts](https://docs.aws.amazon.com/eks/latest/userguide/eks-outposts.html).
+

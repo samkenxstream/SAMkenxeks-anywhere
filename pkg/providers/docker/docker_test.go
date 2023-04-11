@@ -2,12 +2,14 @@ package docker_test
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
-	"reflect"
+	"path"
 	"testing"
+	"time"
 
+	etcdv1 "github.com/aws/etcdadm-controller/api/v1beta1"
 	"github.com/golang/mock/gomock"
-	etcdv1 "github.com/mrajashree/etcdadm-controller/api/v1beta1"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
@@ -23,8 +25,11 @@ import (
 	"github.com/aws/eks-anywhere/pkg/providers/docker"
 	dockerMocks "github.com/aws/eks-anywhere/pkg/providers/docker/mocks"
 	"github.com/aws/eks-anywhere/pkg/types"
+	"github.com/aws/eks-anywhere/pkg/utils/ptr"
 	releasev1alpha1 "github.com/aws/eks-anywhere/release/api/v1alpha1"
 )
+
+const testdataDir = "testdata"
 
 type dockerTest struct {
 	*WithT
@@ -43,6 +48,10 @@ func newTest(t *testing.T) *dockerTest {
 		kubectl:      kubectl,
 		provider:     docker.NewProvider(&v1alpha1.DockerDatacenterConfig{}, client, kubectl, test.FakeNow),
 	}
+}
+
+func givenClusterSpec(t *testing.T, fileName string) *cluster.Spec {
+	return test.NewFullClusterSpec(t, path.Join(testdataDir, fileName))
 }
 
 func TestProviderUpdateKubeConfig(t *testing.T) {
@@ -135,10 +144,25 @@ func TestProviderGenerateDeploymentFileSuccessUpdateMachineTemplate(t *testing.T
 				s.Cluster.Spec.ControlPlaneConfiguration.Count = 3
 				s.VersionsBundle = versionsBundle
 				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
-				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
 			}),
 			wantCPFile: "testdata/valid_deployment_cp_expected.yaml",
 			wantMDFile: "testdata/valid_deployment_md_expected.yaml",
+		},
+		{
+			testName: "valid config 1.24",
+			clusterSpec: test.NewClusterSpec(func(s *cluster.Spec) {
+				s.Cluster.Name = "test-cluster"
+				s.Cluster.Spec.KubernetesVersion = "1.24"
+				s.Cluster.Spec.ClusterNetwork.Pods.CidrBlocks = []string{"192.168.0.0/16"}
+				s.Cluster.Spec.ClusterNetwork.Services.CidrBlocks = []string{"10.128.0.0/12"}
+				s.Cluster.Spec.ControlPlaneConfiguration.Count = 3
+				s.VersionsBundle = versionsBundle
+				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
+			}),
+			wantCPFile: "testdata/valid_deployment_cp_expected_124onwards.yaml",
+			wantMDFile: "testdata/valid_deployment_md_expected_124onwards.yaml",
 		},
 		{
 			testName: "valid config with cp taints",
@@ -151,7 +175,7 @@ func TestProviderGenerateDeploymentFileSuccessUpdateMachineTemplate(t *testing.T
 				s.Cluster.Spec.ControlPlaneConfiguration.Taints = cpTaints
 				s.VersionsBundle = versionsBundle
 				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
-				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
 			}),
 			wantCPFile: "testdata/valid_deployment_cp_taints_expected.yaml",
 			wantMDFile: "testdata/valid_deployment_md_expected.yaml",
@@ -167,7 +191,7 @@ func TestProviderGenerateDeploymentFileSuccessUpdateMachineTemplate(t *testing.T
 				s.Cluster.Spec.ControlPlaneConfiguration.Taints = cpTaints
 				s.VersionsBundle = versionsBundle
 				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
-				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, Taints: wnTaints, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), Taints: wnTaints, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
 			}),
 			wantCPFile: "testdata/valid_deployment_cp_taints_expected.yaml",
 			wantMDFile: "testdata/valid_deployment_md_taints_expected.yaml",
@@ -181,7 +205,7 @@ func TestProviderGenerateDeploymentFileSuccessUpdateMachineTemplate(t *testing.T
 				s.Cluster.Spec.ClusterNetwork.Services.CidrBlocks = []string{"10.128.0.0/12"}
 				s.Cluster.Spec.ControlPlaneConfiguration.Count = 3
 				s.Cluster.Spec.ControlPlaneConfiguration.Taints = cpTaints
-				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, Taints: wnTaints, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}, {Count: 3, Taints: wnTaints2, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-1"}}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), Taints: wnTaints, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}, {Count: ptr.Int(3), Taints: wnTaints2, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-1"}}
 				s.VersionsBundle = versionsBundle
 				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
 			}),
@@ -198,7 +222,7 @@ func TestProviderGenerateDeploymentFileSuccessUpdateMachineTemplate(t *testing.T
 				s.Cluster.Spec.ControlPlaneConfiguration.Count = 3
 				s.VersionsBundle = versionsBundle
 				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
-				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Labels: nodeLabels, Name: "md-0"}}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Labels: nodeLabels, Name: "md-0"}}
 			}),
 			wantCPFile: "testdata/valid_deployment_cp_expected.yaml",
 			wantMDFile: "testdata/valid_deployment_node_labels_md_expected.yaml",
@@ -214,7 +238,7 @@ func TestProviderGenerateDeploymentFileSuccessUpdateMachineTemplate(t *testing.T
 				s.Cluster.Spec.ControlPlaneConfiguration.Labels = nodeLabels
 				s.VersionsBundle = versionsBundle
 				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
-				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
 			}),
 			wantCPFile: "testdata/valid_deployment_node_labels_cp_expected.yaml",
 			wantMDFile: "testdata/valid_deployment_md_expected.yaml",
@@ -230,7 +254,7 @@ func TestProviderGenerateDeploymentFileSuccessUpdateMachineTemplate(t *testing.T
 				s.Cluster.Spec.ControlPlaneConfiguration.Count = 3
 				s.VersionsBundle = versionsBundle
 				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
-				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
 			}),
 			wantCPFile: "testdata/valid_deployment_custom_cidrs_cp_expected.yaml",
 			wantMDFile: "testdata/valid_deployment_custom_cidrs_md_expected.yaml",
@@ -245,7 +269,7 @@ func TestProviderGenerateDeploymentFileSuccessUpdateMachineTemplate(t *testing.T
 				s.Cluster.Spec.ControlPlaneConfiguration.Count = 3
 				s.VersionsBundle = versionsBundle
 				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
-				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
 
 				s.OIDCConfig = &v1alpha1.OIDCConfig{
 					Spec: v1alpha1.OIDCConfigSpec{
@@ -267,7 +291,7 @@ func TestProviderGenerateDeploymentFileSuccessUpdateMachineTemplate(t *testing.T
 				s.Cluster.Spec.ControlPlaneConfiguration.Count = 3
 				s.VersionsBundle = versionsBundle
 				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
-				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
 				s.OIDCConfig = &v1alpha1.OIDCConfig{
 					Spec: v1alpha1.OIDCConfigSpec{
 						ClientId:     "my-client-id",
@@ -287,6 +311,21 @@ func TestProviderGenerateDeploymentFileSuccessUpdateMachineTemplate(t *testing.T
 			}),
 			wantCPFile: "testdata/capd_valid_full_oidc_cp_expected.yaml",
 			wantMDFile: "testdata/capd_valid_full_oidc_md_expected.yaml",
+		},
+		{
+			testName: "valid autoscaling config",
+			clusterSpec: test.NewClusterSpec(func(s *cluster.Spec) {
+				s.Cluster.Name = "test-cluster"
+				s.Cluster.Spec.KubernetesVersion = "1.19"
+				s.Cluster.Spec.ClusterNetwork.Pods.CidrBlocks = []string{"192.168.0.0/16"}
+				s.Cluster.Spec.ClusterNetwork.Services.CidrBlocks = []string{"10.128.0.0/12"}
+				s.Cluster.Spec.ControlPlaneConfiguration.Count = 3
+				s.VersionsBundle = versionsBundle
+				s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
+				s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0", AutoScalingConfiguration: &v1alpha1.AutoScalingConfiguration{MinCount: 3, MaxCount: 5}}}
+			}),
+			wantCPFile: "testdata/valid_deployment_cp_expected.yaml",
+			wantMDFile: "testdata/valid_autoscaler_deployment_md_expected.yaml",
 		},
 	}
 
@@ -356,7 +395,7 @@ func TestProviderGenerateDeploymentFileSuccessUpdateKubeadmConfigTemplate(t *tes
 	clusterSpec.Cluster.Spec.ControlPlaneConfiguration.Taints = cpTaints
 	clusterSpec.VersionsBundle = versionsBundle
 	clusterSpec.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
-	clusterSpec.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
+	clusterSpec.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
 
 	p := docker.NewProvider(&v1alpha1.DockerDatacenterConfig{}, client, kubectl, test.FakeNow)
 	cluster := &types.Cluster{
@@ -403,9 +442,10 @@ func TestProviderGenerateDeploymentFileSuccessNotUpdateMachineTemplate(t *testin
 	client := dockerMocks.NewMockProviderClient(mockCtrl)
 	kubectl := dockerMocks.NewMockProviderKubectlClient(mockCtrl)
 	clusterSpec := test.NewClusterSpec()
+	clusterSpec.Cluster.Spec.KubernetesVersion = v1alpha1.Kube122
 	clusterSpec.Cluster.Spec.ClusterNetwork.Pods.CidrBlocks = []string{"192.168.0.0/16"}
 	clusterSpec.Cluster.Spec.ClusterNetwork.Services.CidrBlocks = []string{"10.128.0.0/12"}
-	clusterSpec.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 0, MachineGroupRef: &v1alpha1.Ref{Name: "fluxAddonTestCluster"}, Name: "md-0"}}
+	clusterSpec.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(0), MachineGroupRef: &v1alpha1.Ref{Name: "fluxTestCluster"}, Name: "md-0"}}
 	p := docker.NewProvider(&v1alpha1.DockerDatacenterConfig{}, client, kubectl, test.FakeNow)
 	cluster := &types.Cluster{
 		Name: "test",
@@ -452,24 +492,6 @@ func TestProviderGenerateDeploymentFileSuccessNotUpdateMachineTemplate(t *testin
 
 	test.AssertContentToFile(t, string(cpContent), "testdata/no_machinetemplate_update_cp_expected.yaml")
 	test.AssertContentToFile(t, string(mdContent), "testdata/no_machinetemplate_update_md_expected.yaml")
-}
-
-func TestSetupAndValidateClusterWithEndpoint(t *testing.T) {
-	clusterSpec := test.NewClusterSpec(func(s *cluster.Spec) {
-		s.Cluster.Name = "test-cluster"
-		s.Cluster.Spec.ControlPlaneConfiguration.Endpoint = &v1alpha1.Endpoint{Host: "test-ip"}
-	})
-	mockCtrl := gomock.NewController(t)
-	client := dockerMocks.NewMockProviderClient(mockCtrl)
-	kubectl := dockerMocks.NewMockProviderKubectlClient(mockCtrl)
-	p := docker.NewProvider(&v1alpha1.DockerDatacenterConfig{}, client, kubectl, test.FakeNow)
-	ctx := context.Background()
-	err := p.SetupAndValidateCreateCluster(ctx, clusterSpec)
-	wantErr := fmt.Errorf("specifying endpoint host configuration in Cluster is not supported")
-
-	if !reflect.DeepEqual(wantErr, err) {
-		t.Errorf("got = <%v>, want = <%v>", err, wantErr)
-	}
 }
 
 func TestGetInfrastructureBundleSuccess(t *testing.T) {
@@ -602,7 +624,7 @@ func TestProviderGenerateCAPISpecForCreateWithPodIAMConfig(t *testing.T) {
 		s.Cluster.Spec.ControlPlaneConfiguration.Count = 1
 		s.VersionsBundle = versionsBundle
 		s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
-		s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}}}
+		s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}}}
 	})
 	clusterSpec.Cluster.Spec.PodIAMConfig = &v1alpha1.PodIAMConfig{ServiceAccountIssuer: "https://test"}
 
@@ -638,7 +660,7 @@ func TestProviderGenerateCAPISpecForCreateWithStackedEtcd(t *testing.T) {
 		s.Cluster.Spec.ClusterNetwork.Services.CidrBlocks = []string{"10.128.0.0/12"}
 		s.Cluster.Spec.ControlPlaneConfiguration.Count = 1
 		s.VersionsBundle = versionsBundle
-		s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: 3, MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}}}
+		s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}}}
 	})
 
 	if provider == nil {
@@ -655,4 +677,225 @@ func TestProviderGenerateCAPISpecForCreateWithStackedEtcd(t *testing.T) {
 		t.Fatalf("failed to generate cluster api spec contents: %v", err)
 	}
 	test.AssertContentToFile(t, string(cp), "testdata/valid_deployment_cp_stacked_etcd_expected.yaml")
+}
+
+func TestDockerTemplateBuilderGenerateCAPISpecControlPlane(t *testing.T) {
+	type args struct {
+		clusterSpec  *cluster.Spec
+		buildOptions []providers.BuildMapOption
+	}
+	tests := []struct {
+		name        string
+		args        args
+		wantContent []byte
+		wantErr     error
+	}{
+		{
+			name: "kube 122 test",
+			args: args{
+				clusterSpec: test.NewClusterSpec(func(s *cluster.Spec) {
+					s.Cluster.Name = "test-cluster"
+					s.Cluster.Spec.KubernetesVersion = "1.22"
+				}),
+				buildOptions: nil,
+			},
+			wantErr: nil,
+		},
+		{
+			name: "kube version not specified",
+			args: args{
+				clusterSpec: test.NewClusterSpec(func(s *cluster.Spec) {
+					s.Cluster.Name = "test-cluster"
+				}),
+				buildOptions: nil,
+			},
+			wantErr: fmt.Errorf("error building template map for CP "),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			builder := docker.NewDockerTemplateBuilder(time.Now)
+
+			gotContent, err := builder.GenerateCAPISpecControlPlane(tt.args.clusterSpec, tt.args.buildOptions...)
+			if err != tt.wantErr && !assert.Contains(t, err.Error(), tt.wantErr.Error()) {
+				t.Errorf("Got DockerTemplateBuilder.GenerateCAPISpecControlPlane() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err == nil {
+				g.Expect(gotContent).NotTo(BeEmpty())
+			}
+		})
+	}
+}
+
+func TestProviderGenerateDeploymentFileForSingleNodeCluster(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	ctx := context.Background()
+	client := dockerMocks.NewMockProviderClient(mockCtrl)
+	kubectl := dockerMocks.NewMockProviderKubectlClient(mockCtrl)
+	provider := docker.NewProvider(&v1alpha1.DockerDatacenterConfig{}, client, kubectl, test.FakeNow)
+	clusterObj := &types.Cluster{Name: "single-node"}
+
+	clusterSpec := test.NewClusterSpec(func(s *cluster.Spec) {
+		s.Cluster.Name = "single-node"
+		s.Cluster.Spec.KubernetesVersion = "1.21"
+		s.Cluster.Spec.ClusterNetwork.Pods.CidrBlocks = []string{"192.168.0.0/16"}
+		s.Cluster.Spec.ClusterNetwork.Services.CidrBlocks = []string{"10.128.0.0/12"}
+		s.Cluster.Spec.ControlPlaneConfiguration.Count = 1
+		s.VersionsBundle = versionsBundle
+		s.Cluster.Spec.WorkerNodeGroupConfigurations = nil
+	})
+
+	if provider == nil {
+		t.Fatalf("provider object is nil")
+	}
+
+	err := provider.SetupAndValidateCreateCluster(ctx, clusterSpec)
+	if err != nil {
+		t.Fatalf("failed to setup and validate: %v", err)
+	}
+
+	cp, _, err := provider.GenerateCAPISpecForCreate(context.Background(), clusterObj, clusterSpec)
+	if err != nil {
+		t.Fatalf("failed to generate cluster api spec contents: %v", err)
+	}
+
+	test.AssertContentToFile(t, string(cp), "testdata/expected_results_cluster_docker_cp_single_node.yaml")
+}
+
+func TestDockerTemplateBuilderGenerateCAPISpecWorkers(t *testing.T) {
+	type args struct {
+		clusterSpec *cluster.Spec
+	}
+	tests := []struct {
+		name        string
+		args        args
+		wantContent []byte
+		wantErr     error
+	}{
+		{
+			name: "kube version not specified",
+			args: args{
+				clusterSpec: test.NewClusterSpec(func(s *cluster.Spec) {
+					s.Cluster.Name = "test-cluster"
+				}),
+			},
+			wantErr: fmt.Errorf("error building template map for MD "),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			builder := docker.NewDockerTemplateBuilder(time.Now)
+
+			gotContent, err := builder.GenerateCAPISpecWorkers(tt.args.clusterSpec, nil, nil)
+			if err != tt.wantErr && !assert.Contains(t, err.Error(), tt.wantErr.Error()) {
+				t.Errorf("Got DockerTemplateBuilder.GenerateCAPISpecWorkers() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err == nil {
+				g.Expect(gotContent).NotTo(BeEmpty())
+			}
+		})
+	}
+}
+
+func TestInvalidDockerTemplateWithControlplaneEndpoint(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	ctx := context.Background()
+	client := dockerMocks.NewMockProviderClient(mockCtrl)
+	kubectl := dockerMocks.NewMockProviderKubectlClient(mockCtrl)
+	provider := docker.NewProvider(&v1alpha1.DockerDatacenterConfig{}, client, kubectl, test.FakeNow)
+
+	clusterSpec := test.NewClusterSpec(func(s *cluster.Spec) {
+		s.Cluster.Name = "test-cluster"
+		s.Cluster.Spec.KubernetesVersion = "1.19"
+		s.Cluster.Spec.ClusterNetwork.Pods.CidrBlocks = []string{"192.168.0.0/16"}
+		s.Cluster.Spec.ClusterNetwork.Services.CidrBlocks = []string{"10.128.0.0/12"}
+		s.Cluster.Spec.ControlPlaneConfiguration.Count = 3
+		s.Cluster.Spec.ControlPlaneConfiguration.Endpoint = &v1alpha1.Endpoint{Host: "test-ip"}
+		s.Cluster.Spec.ExternalEtcdConfiguration = &v1alpha1.ExternalEtcdConfiguration{Count: 3}
+		s.Cluster.Spec.WorkerNodeGroupConfigurations = []v1alpha1.WorkerNodeGroupConfiguration{{Count: ptr.Int(3), MachineGroupRef: &v1alpha1.Ref{Name: "test-cluster"}, Name: "md-0"}}
+	})
+	wantErr := fmt.Errorf("specifying endpoint host configuration in Cluster is not supported")
+	err := provider.SetupAndValidateCreateCluster(ctx, clusterSpec)
+
+	if err == nil || err.Error() != wantErr.Error() {
+		t.Fatalf("err %v, wantErr %v", err, wantErr)
+	}
+}
+
+func TestDockerGenerateDeploymentFileWithMirrorConfig(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	ctx := context.Background()
+	client := dockerMocks.NewMockProviderClient(mockCtrl)
+	kubectl := dockerMocks.NewMockProviderKubectlClient(mockCtrl)
+	provider := docker.NewProvider(&v1alpha1.DockerDatacenterConfig{}, client, kubectl, test.FakeNow)
+	clusterObj := &types.Cluster{Name: "test"}
+	clusterSpec := givenClusterSpec(t, "cluster_mirror_config.yaml")
+
+	if err := provider.SetupAndValidateCreateCluster(ctx, clusterSpec); err != nil {
+		t.Fatalf("failed to setup and validate: %v", err)
+	}
+
+	cp, md, err := provider.GenerateCAPISpecForCreate(context.Background(), clusterObj, clusterSpec)
+	if err != nil {
+		t.Fatalf("failed to generate cluster api spec contents: %v", err)
+	}
+
+	test.AssertContentToFile(t, string(cp), "testdata/expected_results_mirror_config_cp.yaml")
+	test.AssertContentToFile(t, string(md), "testdata/expected_results_mirror_config_md.yaml")
+}
+
+func TestDockerGenerateDeploymentFileWithMirrorAndCertConfig(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	ctx := context.Background()
+	client := dockerMocks.NewMockProviderClient(mockCtrl)
+	kubectl := dockerMocks.NewMockProviderKubectlClient(mockCtrl)
+	provider := docker.NewProvider(&v1alpha1.DockerDatacenterConfig{}, client, kubectl, test.FakeNow)
+	clusterObj := &types.Cluster{Name: "test"}
+	clusterSpec := givenClusterSpec(t, "cluster_mirror_with_cert_config.yaml")
+
+	if err := provider.SetupAndValidateCreateCluster(ctx, clusterSpec); err != nil {
+		t.Fatalf("failed to setup and validate: %v", err)
+	}
+
+	cp, md, err := provider.GenerateCAPISpecForCreate(context.Background(), clusterObj, clusterSpec)
+	if err != nil {
+		t.Fatalf("failed to generate cluster api spec contents: %v", err)
+	}
+
+	fmt.Println("CP template starts")
+	fmt.Println(string(cp))
+	fmt.Println("CP template ends")
+	fmt.Println("MD template starts")
+	fmt.Println(string(md))
+	fmt.Println("MDtemplate ends")
+	test.AssertContentToFile(t, string(cp), "testdata/expected_results_mirror_with_cert_config_cp.yaml")
+	test.AssertContentToFile(t, string(md), "testdata/expected_results_mirror_with_cert_config_md.yaml")
+}
+
+func TestDockerGenerateDeploymentFileWithMirrorAndAuthConfig(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	t.Setenv("REGISTRY_USERNAME", "username")
+	t.Setenv("REGISTRY_PASSWORD", "password")
+	ctx := context.Background()
+	client := dockerMocks.NewMockProviderClient(mockCtrl)
+	kubectl := dockerMocks.NewMockProviderKubectlClient(mockCtrl)
+	provider := docker.NewProvider(&v1alpha1.DockerDatacenterConfig{}, client, kubectl, test.FakeNow)
+	clusterObj := &types.Cluster{Name: "test"}
+	clusterSpec := givenClusterSpec(t, "cluster_mirror_with_auth_config.yaml")
+
+	if err := provider.SetupAndValidateCreateCluster(ctx, clusterSpec); err != nil {
+		t.Fatalf("failed to setup and validate: %v", err)
+	}
+
+	cp, md, err := provider.GenerateCAPISpecForCreate(context.Background(), clusterObj, clusterSpec)
+	if err != nil {
+		t.Fatalf("failed to generate cluster api spec contents: %v", err)
+	}
+
+	test.AssertContentToFile(t, string(cp), "testdata/expected_results_mirror_with_auth_config_cp.yaml")
+	test.AssertContentToFile(t, string(md), "testdata/expected_results_mirror_with_auth_config_md.yaml")
 }

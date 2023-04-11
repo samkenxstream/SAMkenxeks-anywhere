@@ -80,7 +80,9 @@ func TestConfigureAWSIAMAuthInKubeadmControlPlane(t *testing.T) {
 										ImageRepository: "public.ecr.aws/eks-distro/etcd-io",
 										ImageTag:        "v3.4.16-eks-1-21-9",
 									},
-									ExtraArgs: map[string]string{},
+									ExtraArgs: map[string]string{
+										"cipher-suites": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+									},
 								},
 							},
 							APIServer: bootstrapv1.APIServer{
@@ -105,17 +107,44 @@ func TestConfigureAWSIAMAuthInKubeadmControlPlane(t *testing.T) {
 								},
 							},
 							ControllerManager: bootstrapv1.ControlPlaneComponent{
-								ExtraArgs: map[string]string{},
+								ExtraArgs:    tlsCipherSuitesArgs(),
+								ExtraVolumes: []bootstrapv1.HostPathMount{},
+							},
+							Scheduler: bootstrapv1.ControlPlaneComponent{
+								ExtraArgs:    map[string]string{},
+								ExtraVolumes: []bootstrapv1.HostPathMount{},
 							},
 						},
 						InitConfiguration: &bootstrapv1.InitConfiguration{
 							NodeRegistration: bootstrapv1.NodeRegistrationOptions{
-								KubeletExtraArgs: map[string]string{},
+								KubeletExtraArgs: map[string]string{
+									"tls-cipher-suites": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+									"node-labels":       "key1=val1,key2=val2",
+								},
+								Taints: []v1.Taint{
+									{
+										Key:       "key1",
+										Value:     "val1",
+										Effect:    v1.TaintEffectNoExecute,
+										TimeAdded: nil,
+									},
+								},
 							},
 						},
 						JoinConfiguration: &bootstrapv1.JoinConfiguration{
 							NodeRegistration: bootstrapv1.NodeRegistrationOptions{
-								KubeletExtraArgs: map[string]string{},
+								KubeletExtraArgs: map[string]string{
+									"tls-cipher-suites": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+									"node-labels":       "key1=val1,key2=val2",
+								},
+								Taints: []v1.Taint{
+									{
+										Key:       "key1",
+										Value:     "val1",
+										Effect:    v1.TaintEffectNoExecute,
+										TimeAdded: nil,
+									},
+								},
 							},
 						},
 						PreKubeadmCommands:  []string{},
@@ -128,21 +157,21 @@ func TestConfigureAWSIAMAuthInKubeadmControlPlane(t *testing.T) {
 								Content: `
 # clusters refers to the remote service.
 clusters:
-	- name: aws-iam-authenticator
-	cluster:
-		certificate-authority: /var/aws-iam-authenticator/cert.pem
-		server: https://localhost:21362/authenticate
+  - name: aws-iam-authenticator
+    cluster:
+      certificate-authority: /var/aws-iam-authenticator/cert.pem
+      server: https://localhost:21362/authenticate
 # users refers to the API Server's webhook configuration
 # (we don't need to authenticate the API server).
 users:
-	- name: apiserver
+  - name: apiserver
 # kubeconfig files require a context. Provide one for the API Server.
 current-context: webhook
 contexts:
 - name: webhook
-	context:
-	cluster: aws-iam-authenticator
-	user: apiserver
+  context:
+    cluster: aws-iam-authenticator
+    user: apiserver
 `,
 							},
 							{
@@ -151,7 +180,7 @@ contexts:
 								Permissions: "0640",
 								ContentFrom: &bootstrapv1.FileSource{
 									Secret: bootstrapv1.SecretFileSource{
-										Name: "aws-iam-authenticator-ca",
+										Name: "test-cluster-aws-iam-authenticator-ca",
 										Key:  "cert.pem",
 									},
 								},
@@ -162,7 +191,7 @@ contexts:
 								Permissions: "0640",
 								ContentFrom: &bootstrapv1.FileSource{
 									Secret: bootstrapv1.SecretFileSource{
-										Name: "aws-iam-authenticator-ca",
+										Name: "test-cluster-aws-iam-authenticator-ca",
 										Key:  "key.pem",
 									},
 								},
@@ -255,7 +284,9 @@ func TestConfigureOIDCInKubeadmControlPlane(t *testing.T) {
 										ImageRepository: "public.ecr.aws/eks-distro/etcd-io",
 										ImageTag:        "v3.4.16-eks-1-21-9",
 									},
-									ExtraArgs: map[string]string{},
+									ExtraArgs: map[string]string{
+										"cipher-suites": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+									},
 								},
 							},
 							APIServer: bootstrapv1.APIServer{
@@ -273,17 +304,44 @@ func TestConfigureOIDCInKubeadmControlPlane(t *testing.T) {
 								},
 							},
 							ControllerManager: bootstrapv1.ControlPlaneComponent{
-								ExtraArgs: map[string]string{},
+								ExtraArgs:    tlsCipherSuitesArgs(),
+								ExtraVolumes: []bootstrapv1.HostPathMount{},
+							},
+							Scheduler: bootstrapv1.ControlPlaneComponent{
+								ExtraArgs:    map[string]string{},
+								ExtraVolumes: []bootstrapv1.HostPathMount{},
 							},
 						},
 						InitConfiguration: &bootstrapv1.InitConfiguration{
 							NodeRegistration: bootstrapv1.NodeRegistrationOptions{
-								KubeletExtraArgs: map[string]string{},
+								KubeletExtraArgs: map[string]string{
+									"tls-cipher-suites": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+									"node-labels":       "key1=val1,key2=val2",
+								},
+								Taints: []v1.Taint{
+									{
+										Key:       "key1",
+										Value:     "val1",
+										Effect:    v1.TaintEffectNoExecute,
+										TimeAdded: nil,
+									},
+								},
 							},
 						},
 						JoinConfiguration: &bootstrapv1.JoinConfiguration{
 							NodeRegistration: bootstrapv1.NodeRegistrationOptions{
-								KubeletExtraArgs: map[string]string{},
+								KubeletExtraArgs: map[string]string{
+									"tls-cipher-suites": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+									"node-labels":       "key1=val1,key2=val2",
+								},
+								Taints: []v1.Taint{
+									{
+										Key:       "key1",
+										Value:     "val1",
+										Effect:    v1.TaintEffectNoExecute,
+										TimeAdded: nil,
+									},
+								},
 							},
 						},
 						PreKubeadmCommands:  []string{},
@@ -356,7 +414,9 @@ func TestConfigurePodIamAuthInKubeadmControlPlane(t *testing.T) {
 										ImageRepository: "public.ecr.aws/eks-distro/etcd-io",
 										ImageTag:        "v3.4.16-eks-1-21-9",
 									},
-									ExtraArgs: map[string]string{},
+									ExtraArgs: map[string]string{
+										"cipher-suites": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+									},
 								},
 							},
 							APIServer: bootstrapv1.APIServer{
@@ -368,17 +428,44 @@ func TestConfigurePodIamAuthInKubeadmControlPlane(t *testing.T) {
 								},
 							},
 							ControllerManager: bootstrapv1.ControlPlaneComponent{
-								ExtraArgs: map[string]string{},
+								ExtraArgs:    tlsCipherSuitesArgs(),
+								ExtraVolumes: []bootstrapv1.HostPathMount{},
+							},
+							Scheduler: bootstrapv1.ControlPlaneComponent{
+								ExtraArgs:    map[string]string{},
+								ExtraVolumes: []bootstrapv1.HostPathMount{},
 							},
 						},
 						InitConfiguration: &bootstrapv1.InitConfiguration{
 							NodeRegistration: bootstrapv1.NodeRegistrationOptions{
-								KubeletExtraArgs: map[string]string{},
+								KubeletExtraArgs: map[string]string{
+									"tls-cipher-suites": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+									"node-labels":       "key1=val1,key2=val2",
+								},
+								Taints: []v1.Taint{
+									{
+										Key:       "key1",
+										Value:     "val1",
+										Effect:    v1.TaintEffectNoExecute,
+										TimeAdded: nil,
+									},
+								},
 							},
 						},
 						JoinConfiguration: &bootstrapv1.JoinConfiguration{
 							NodeRegistration: bootstrapv1.NodeRegistrationOptions{
-								KubeletExtraArgs: map[string]string{},
+								KubeletExtraArgs: map[string]string{
+									"tls-cipher-suites": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+									"node-labels":       "key1=val1,key2=val2",
+								},
+								Taints: []v1.Taint{
+									{
+										Key:       "key1",
+										Value:     "val1",
+										Effect:    v1.TaintEffectNoExecute,
+										TimeAdded: nil,
+									},
+								},
 							},
 						},
 						PreKubeadmCommands:  []string{},

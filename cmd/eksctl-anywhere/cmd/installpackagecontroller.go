@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
@@ -9,19 +10,22 @@ import (
 
 	"github.com/aws/eks-anywhere/pkg/curatedpackages"
 	"github.com/aws/eks-anywhere/pkg/kubeconfig"
+	"github.com/aws/eks-anywhere/pkg/validations"
 	"github.com/aws/eks-anywhere/pkg/version"
 )
 
 type installControllerOptions struct {
-	kubeVersion string
+	fileName   string
+	kubeConfig string
 }
 
 var ico = &installControllerOptions{}
 
 func init() {
 	installCmd.AddCommand(installPackageControllerCommand)
-	installPackageControllerCommand.Flags().StringVar(&ico.kubeVersion, "kube-version", "", "Bundle version to use")
-	if err := installPackageControllerCommand.MarkFlagRequired("kube-version"); err != nil {
+	installPackageControllerCommand.Flags().StringVarP(&ico.fileName, "filename", "f", "", "Filename that contains EKS-A cluster configuration")
+	installPackageControllerCommand.Flags().StringVar(&ico.kubeConfig, "kubeConfig", "", "Management cluster kubeconfig file")
+	if err := installPackageControllerCommand.MarkFlagRequired("filename"); err != nil {
 		log.Fatalf("Error marking flag as required: %v", err)
 	}
 }
@@ -37,41 +41,38 @@ var installPackageControllerCommand = &cobra.Command{
 }
 
 func runInstallPackageController(cmd *cobra.Command, args []string) error {
-	if err := curatedpackages.ValidateKubeVersion(ico.kubeVersion, curatedpackages.Registry); err != nil {
-		return err
+	clusterConfigFileExist := validations.FileExists(ico.fileName)
+	if !clusterConfigFileExist {
+		return fmt.Errorf("the cluster config file %s does not exist", ico.fileName)
 	}
-
 	return installPackageController(cmd.Context())
 }
 
 func installPackageController(ctx context.Context) error {
 	kubeConfig := kubeconfig.FromEnvironment()
 
-	deps, err := curatedpackages.NewDependenciesForPackages(ctx, kubeConfig)
+	clusterSpec, err := readAndValidateClusterSpec(ico.fileName, version.Get())
+	if err != nil {
+		return fmt.Errorf("the cluster config file provided is invalid: %v", err)
+	}
+
+	deps, err := NewDependenciesForPackages(ctx, WithMountPaths(kubeConfig), WithClusterSpec(clusterSpec), WithKubeConfig(ico.kubeConfig))
 	if err != nil {
 		return fmt.Errorf("unable to initialize executables: %v", err)
 	}
 
-	versionBundle, err := curatedpackages.GetVersionBundle(deps.ManifestReader, version.Get().GitVersion, ico.kubeVersion)
-	if err != nil {
-		return err
-	}
-	helmChart := versionBundle.PackageController.HelmChart
-	ctrlClient := curatedpackages.NewPackageControllerClient(
-		deps.Helm,
-		deps.Kubectl,
-		kubeConfig,
-		helmChart.Image(),
-		helmChart.Name,
-		helmChart.Tag(),
-	)
+	ctrlClient := deps.PackageControllerClient
 
-	if err = ctrlClient.ValidateControllerDoesNotExist(ctx); err != nil {
-		return err
+	if clusterSpec.Cluster.IsSelfManaged() && ctrlClient.IsInstalled(ctx) {
+		return errors.New("curated Packages controller exists in the current cluster")
+	}
+
+	if curatedpackages.IsPackageControllerDisabled(clusterSpec.Cluster) {
+		return errors.New("package controller disabled in cluster specification")
 	}
 
 	curatedpackages.PrintLicense()
-	err = ctrlClient.InstallController(ctx)
+	err = ctrlClient.Enable(ctx)
 	if err != nil {
 		return err
 	}

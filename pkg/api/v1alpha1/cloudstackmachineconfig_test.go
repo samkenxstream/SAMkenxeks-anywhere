@@ -15,7 +15,7 @@ var cloudStackMachineConfigSpec1 = &CloudStackMachineConfigSpec{
 	ComputeOffering: CloudStackResourceIdentifier{
 		Name: "offering1",
 	},
-	DiskOffering: CloudStackResourceDiskOffering{
+	DiskOffering: &CloudStackResourceDiskOffering{
 		CloudStackResourceIdentifier: CloudStackResourceIdentifier{
 			Name: "diskOffering1",
 		},
@@ -33,8 +33,10 @@ var cloudStackMachineConfigSpec1 = &CloudStackMachineConfigSpec{
 	UserCustomDetails: map[string]string{
 		"foo": "bar",
 	},
+	Symlinks: map[string]string{
+		"/var/log/kubernetes": "/data/var/log/kubernetes",
+	},
 	AffinityGroupIds: []string{"affinityGroupId1"},
-	Affinity:         "pro",
 }
 
 func TestGetCloudStackMachineConfigs(t *testing.T) {
@@ -103,7 +105,7 @@ func TestGetCloudStackMachineConfigs(t *testing.T) {
 						ComputeOffering: CloudStackResourceIdentifier{
 							Id: "m4-large-id",
 						},
-						DiskOffering: CloudStackResourceDiskOffering{
+						DiskOffering: &CloudStackResourceDiskOffering{
 							CloudStackResourceIdentifier: CloudStackResourceIdentifier{
 								Name: "Small",
 							},
@@ -196,7 +198,7 @@ func TestGetCloudStackMachineConfigs(t *testing.T) {
 						ComputeOffering: CloudStackResourceIdentifier{
 							Name: "m4-large",
 						},
-						DiskOffering: CloudStackResourceDiskOffering{
+						DiskOffering: &CloudStackResourceDiskOffering{
 							CloudStackResourceIdentifier: CloudStackResourceIdentifier{
 								Name: "Small",
 							},
@@ -226,7 +228,7 @@ func TestGetCloudStackMachineConfigs(t *testing.T) {
 						ComputeOffering: CloudStackResourceIdentifier{
 							Name: "m5-xlarge",
 						},
-						DiskOffering: CloudStackResourceDiskOffering{
+						DiskOffering: &CloudStackResourceDiskOffering{
 							CloudStackResourceIdentifier: CloudStackResourceIdentifier{
 								Name: "Medium",
 							},
@@ -259,6 +261,315 @@ func TestGetCloudStackMachineConfigs(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, tt.wantCloudStackMachineConfigs) {
 				t.Fatalf("GetCloudStackMachineConfigs() = %#v, want %#v", got, tt.wantCloudStackMachineConfigs)
+			}
+		})
+	}
+}
+
+func TestCloudStackMachineConfigValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		obj     *CloudStackMachineConfig
+		wantErr string
+	}{
+		{
+			name: "valid config",
+			obj: &CloudStackMachineConfig{
+				Spec: *cloudStackMachineConfigSpec1,
+			},
+			wantErr: "",
+		},
+		{
+			name: "disk offering empty",
+			obj: &CloudStackMachineConfig{
+				Spec: CloudStackMachineConfigSpec{
+					Template: CloudStackResourceIdentifier{
+						Name: "template1",
+					},
+					ComputeOffering: CloudStackResourceIdentifier{
+						Name: "offering1",
+					},
+					DiskOffering: &CloudStackResourceDiskOffering{},
+					Users: []UserConfiguration{
+						{
+							Name:              "zone1",
+							SshAuthorizedKeys: []string{"key"},
+						},
+					},
+					UserCustomDetails: map[string]string{
+						"foo": "bar",
+					},
+					Symlinks: map[string]string{
+						"/var/log/kubernetes": "/data/var/log/kubernetes",
+					},
+					AffinityGroupIds: []string{"affinityGroupId1"},
+				},
+			},
+			wantErr: "",
+		},
+		{
+			name: "invalid - bad mount path",
+			obj: &CloudStackMachineConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec: CloudStackMachineConfigSpec{
+					Template: CloudStackResourceIdentifier{
+						Name: "template1",
+					},
+					ComputeOffering: CloudStackResourceIdentifier{
+						Name: "offering1",
+					},
+					DiskOffering: &CloudStackResourceDiskOffering{
+						CloudStackResourceIdentifier: CloudStackResourceIdentifier{
+							Name: "diskOffering1",
+						},
+						MountPath:  "/",
+						Device:     "/dev/vdb",
+						Filesystem: "ext4",
+						Label:      "data_disk",
+					},
+					Users: []UserConfiguration{
+						{
+							Name:              "zone1",
+							SshAuthorizedKeys: []string{"key"},
+						},
+					},
+					UserCustomDetails: map[string]string{
+						"foo": "bar",
+					},
+					Symlinks: map[string]string{
+						"/var/log/kubernetes": "/data/var/log/kubernetes",
+					},
+					Affinity: "pro",
+				},
+			},
+			wantErr: "mountPath: / invalid, must be non-empty and start with /",
+		},
+		{
+			name: "invalid - empty device",
+			obj: &CloudStackMachineConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec: CloudStackMachineConfigSpec{
+					Template: CloudStackResourceIdentifier{
+						Name: "template1",
+					},
+					ComputeOffering: CloudStackResourceIdentifier{
+						Name: "offering1",
+					},
+					DiskOffering: &CloudStackResourceDiskOffering{
+						CloudStackResourceIdentifier: CloudStackResourceIdentifier{
+							Name: "diskOffering1",
+						},
+						MountPath:  "/data",
+						Device:     "",
+						Filesystem: "ext4",
+						Label:      "data_disk",
+					},
+					Users: []UserConfiguration{
+						{
+							Name:              "zone1",
+							SshAuthorizedKeys: []string{"key"},
+						},
+					},
+					UserCustomDetails: map[string]string{
+						"foo": "bar",
+					},
+					Symlinks: map[string]string{
+						"/var/log/kubernetes": "/data/var/log/kubernetes",
+					},
+					AffinityGroupIds: []string{"affinityGroupId1"},
+				},
+			},
+			wantErr: "device:  invalid, empty device",
+		},
+		{
+			name: "invalid - empty filesystem",
+			obj: &CloudStackMachineConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec: CloudStackMachineConfigSpec{
+					Template: CloudStackResourceIdentifier{
+						Name: "template1",
+					},
+					ComputeOffering: CloudStackResourceIdentifier{
+						Name: "offering1",
+					},
+					DiskOffering: &CloudStackResourceDiskOffering{
+						CloudStackResourceIdentifier: CloudStackResourceIdentifier{
+							Name: "diskOffering1",
+						},
+						MountPath:  "/data",
+						Device:     "/dev/vdb",
+						Filesystem: "",
+						Label:      "data_disk",
+					},
+					Users: []UserConfiguration{
+						{
+							Name:              "zone1",
+							SshAuthorizedKeys: []string{"key"},
+						},
+					},
+					UserCustomDetails: map[string]string{
+						"foo": "bar",
+					},
+					Symlinks: map[string]string{
+						"/var/log/kubernetes": "/data/var/log/kubernetes",
+					},
+					Affinity: "pro",
+				},
+			},
+			wantErr: "filesystem:  invalid, empty filesystem",
+		},
+		{
+			name: "invalid - empty label",
+			obj: &CloudStackMachineConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec: CloudStackMachineConfigSpec{
+					Template: CloudStackResourceIdentifier{
+						Name: "template1",
+					},
+					ComputeOffering: CloudStackResourceIdentifier{
+						Name: "offering1",
+					},
+					DiskOffering: &CloudStackResourceDiskOffering{
+						CloudStackResourceIdentifier: CloudStackResourceIdentifier{
+							Name: "diskOffering1",
+						},
+						MountPath:  "/data",
+						Device:     "/dev/vdb",
+						Filesystem: "ext4",
+						Label:      "",
+					},
+					Users: []UserConfiguration{
+						{
+							Name:              "zone1",
+							SshAuthorizedKeys: []string{"key"},
+						},
+					},
+					UserCustomDetails: map[string]string{
+						"foo": "bar",
+					},
+					Symlinks: map[string]string{
+						"/var/log/kubernetes": "/data/var/log/kubernetes",
+					},
+					AffinityGroupIds: []string{"affinityGroupId1"},
+				},
+			},
+			wantErr: "label:  invalid, empty label",
+		},
+		{
+			name: "invalid - restricted user details",
+			obj: &CloudStackMachineConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec: CloudStackMachineConfigSpec{
+					Template: CloudStackResourceIdentifier{
+						Name: "template1",
+					},
+					ComputeOffering: CloudStackResourceIdentifier{
+						Name: "offering1",
+					},
+					DiskOffering: &CloudStackResourceDiskOffering{
+						CloudStackResourceIdentifier: CloudStackResourceIdentifier{
+							Name: "diskOffering1",
+						},
+						MountPath:  "/data",
+						Device:     "/dev/vdb",
+						Filesystem: "ext4",
+						Label:      "data_disk",
+					},
+					Users: []UserConfiguration{
+						{
+							Name:              "zone1",
+							SshAuthorizedKeys: []string{"key"},
+						},
+					},
+					UserCustomDetails: map[string]string{"keyboard": "test"},
+					Symlinks: map[string]string{
+						"/var/log/kubernetes": "/data/var/log/kubernetes",
+					},
+					AffinityGroupIds: []string{"affinityGroupId1"},
+				},
+			},
+			wantErr: "restricted key keyboard found in custom user details",
+		},
+		{
+			name: "bad affinity type",
+			obj: &CloudStackMachineConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec: CloudStackMachineConfigSpec{
+					Template: CloudStackResourceIdentifier{
+						Name: "template1",
+					},
+					ComputeOffering: CloudStackResourceIdentifier{
+						Name: "offering1",
+					},
+					DiskOffering: &CloudStackResourceDiskOffering{
+						CloudStackResourceIdentifier: CloudStackResourceIdentifier{
+							Name: "diskOffering1",
+						},
+						MountPath:  "/data",
+						Device:     "/dev/vdb",
+						Filesystem: "ext4",
+						Label:      "data_disk",
+					},
+					Users: []UserConfiguration{
+						{
+							Name:              "zone1",
+							SshAuthorizedKeys: []string{"key"},
+						},
+					},
+					UserCustomDetails: map[string]string{"foo": "bar"},
+					Symlinks: map[string]string{
+						"/var/log/kubernetes": "/data/var/log/kubernetes",
+					},
+					Affinity: "xxx",
+				},
+			},
+			wantErr: "invalid affinity type xxx for CloudStackMachineConfig test",
+		},
+		{
+			name: "both affinity and affinityGroupIds are defined",
+			obj: &CloudStackMachineConfig{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec: CloudStackMachineConfigSpec{
+					Template: CloudStackResourceIdentifier{
+						Name: "template1",
+					},
+					ComputeOffering: CloudStackResourceIdentifier{
+						Name: "offering1",
+					},
+					DiskOffering: &CloudStackResourceDiskOffering{
+						CloudStackResourceIdentifier: CloudStackResourceIdentifier{
+							Name: "diskOffering1",
+						},
+						MountPath:  "/data",
+						Device:     "/dev/vdb",
+						Filesystem: "ext4",
+						Label:      "data_disk",
+					},
+					Users: []UserConfiguration{
+						{
+							Name:              "zone1",
+							SshAuthorizedKeys: []string{"key"},
+						},
+					},
+					UserCustomDetails: map[string]string{"foo": "bar"},
+					Symlinks: map[string]string{
+						"/var/log/kubernetes": "/data/var/log/kubernetes",
+					},
+					AffinityGroupIds: []string{"affinityGroupId1"},
+					Affinity:         "pro",
+				},
+			},
+			wantErr: "affinity and affinityGroupIds cannot be set at the same time for CloudStackMachineConfig test. Please provide either one of them or none",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := NewWithT(t)
+			err := tt.obj.Validate()
+			if tt.wantErr == "" {
+				g.Expect(err).To(BeNil())
+			} else {
+				g.Expect(err).To(MatchError(ContainSubstring(tt.wantErr)))
 			}
 		})
 	}
@@ -301,6 +612,7 @@ func TestCloudStackMachineNotEqualComputeOfferingId(t *testing.T) {
 func TestCloudStackMachineNotEqualDiskOfferingName(t *testing.T) {
 	g := NewWithT(t)
 	cloudStackMachineConfigSpec2 := cloudStackMachineConfigSpec1.DeepCopy()
+	cloudStackMachineConfigSpec2.DiskOffering = (*cloudStackMachineConfigSpec1.DiskOffering).DeepCopy()
 	cloudStackMachineConfigSpec2.DiskOffering.Name = "newDiskOffering"
 	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "Disk offering name comparison in CloudStackMachineConfigSpec not detected")
 }
@@ -308,6 +620,7 @@ func TestCloudStackMachineNotEqualDiskOfferingName(t *testing.T) {
 func TestCloudStackMachineNotEqualDiskOfferingId(t *testing.T) {
 	g := NewWithT(t)
 	cloudStackMachineConfigSpec2 := cloudStackMachineConfigSpec1.DeepCopy()
+	cloudStackMachineConfigSpec2.DiskOffering = (*cloudStackMachineConfigSpec1.DiskOffering).DeepCopy()
 	cloudStackMachineConfigSpec2.DiskOffering.Id = "newDiskOffering"
 	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "Disk offering id comparison in CloudStackMachineConfigSpec not detected")
 }
@@ -315,6 +628,7 @@ func TestCloudStackMachineNotEqualDiskOfferingId(t *testing.T) {
 func TestCloudStackMachineNotEqualDiskOfferingMountPath(t *testing.T) {
 	g := NewWithT(t)
 	cloudStackMachineConfigSpec2 := cloudStackMachineConfigSpec1.DeepCopy()
+	cloudStackMachineConfigSpec2.DiskOffering = (*cloudStackMachineConfigSpec1.DiskOffering).DeepCopy()
 	cloudStackMachineConfigSpec2.DiskOffering.MountPath = "newDiskOfferingPath"
 	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "Disk offering path comparison in CloudStackMachineConfigSpec not detected")
 }
@@ -322,6 +636,7 @@ func TestCloudStackMachineNotEqualDiskOfferingMountPath(t *testing.T) {
 func TestCloudStackMachineNotEqualDiskOfferingDevice(t *testing.T) {
 	g := NewWithT(t)
 	cloudStackMachineConfigSpec2 := cloudStackMachineConfigSpec1.DeepCopy()
+	cloudStackMachineConfigSpec2.DiskOffering = (*cloudStackMachineConfigSpec1.DiskOffering).DeepCopy()
 	cloudStackMachineConfigSpec2.DiskOffering.Device = "/dev/sdb"
 	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "Disk offering device comparison in CloudStackMachineConfigSpec not detected")
 }
@@ -329,6 +644,7 @@ func TestCloudStackMachineNotEqualDiskOfferingDevice(t *testing.T) {
 func TestCloudStackMachineNotEqualDiskOfferingLabel(t *testing.T) {
 	g := NewWithT(t)
 	cloudStackMachineConfigSpec2 := cloudStackMachineConfigSpec1.DeepCopy()
+	cloudStackMachineConfigSpec2.DiskOffering = (*cloudStackMachineConfigSpec1.DiskOffering).DeepCopy()
 	cloudStackMachineConfigSpec2.DiskOffering.Label = "data_disk_new"
 	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "Disk offering label comparison in CloudStackMachineConfigSpec not detected")
 }
@@ -336,6 +652,7 @@ func TestCloudStackMachineNotEqualDiskOfferingLabel(t *testing.T) {
 func TestCloudStackMachineNotEqualDiskOfferingFilesystem(t *testing.T) {
 	g := NewWithT(t)
 	cloudStackMachineConfigSpec2 := cloudStackMachineConfigSpec1.DeepCopy()
+	cloudStackMachineConfigSpec2.DiskOffering = (*cloudStackMachineConfigSpec1.DiskOffering).DeepCopy()
 	cloudStackMachineConfigSpec2.DiskOffering.Filesystem = "ext3"
 	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "Disk offering filesystem comparison in CloudStackMachineConfigSpec not detected")
 }
@@ -368,9 +685,32 @@ func TestCloudStackMachineNotEqualUserCustomDetailsNil(t *testing.T) {
 	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "UserCustomDetails comparison in CloudStackMachineConfigSpec not detected")
 }
 
+func TestCloudStackMachineNotEqualSymlinksNil(t *testing.T) {
+	g := NewWithT(t)
+	cloudStackMachineConfigSpec2 := cloudStackMachineConfigSpec1.DeepCopy()
+	cloudStackMachineConfigSpec2.Symlinks = nil
+	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "Symlinks comparison in CloudStackMachineConfigSpec not detected")
+}
+
 func TestCloudStackMachineNotEqualUserCustomDetails(t *testing.T) {
 	g := NewWithT(t)
 	cloudStackMachineConfigSpec2 := cloudStackMachineConfigSpec1.DeepCopy()
 	cloudStackMachineConfigSpec2.UserCustomDetails["i"] = "j"
 	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "UserCustomDetails comparison in CloudStackMachineConfigSpec not detected")
+}
+
+func TestCloudStackMachineNotEqualSymlinks(t *testing.T) {
+	g := NewWithT(t)
+	cloudStackMachineConfigSpec2 := cloudStackMachineConfigSpec1.DeepCopy()
+	cloudStackMachineConfigSpec2.Symlinks["i"] = "j"
+	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "Symlinks comparison in CloudStackMachineConfigSpec not detected")
+}
+
+func TestCloudStackMachineNotEqualSymlinksDifferentTargetSameKey(t *testing.T) {
+	g := NewWithT(t)
+	cloudStackMachineConfigSpec2 := cloudStackMachineConfigSpec1.DeepCopy()
+	for k, v := range cloudStackMachineConfigSpec2.Symlinks {
+		cloudStackMachineConfigSpec2.Symlinks[k] = "/different" + v
+	}
+	g.Expect(cloudStackMachineConfigSpec1.Equal(cloudStackMachineConfigSpec2)).To(BeFalse(), "Symlinks comparison in CloudStackMachineConfigSpec not detected")
 }

@@ -4,9 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"io"
 	"strings"
-	"text/tabwriter"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
@@ -17,59 +16,72 @@ import (
 )
 
 const (
-	minWidth   = 16
-	tabWidth   = 8
-	padding    = 0
-	padChar    = '\t'
-	flags      = 0
-	CustomName = "my-"
+	CustomName = "generated-"
 	kind       = "Package"
 )
 
+type PackageClientOpt func(*PackageClient)
+
 type PackageClient struct {
-	bundle   *packagesv1.PackageBundle
-	packages []string
-	kubectl  KubectlRunner
+	bundle         *packagesv1.PackageBundle
+	customPackages []string
+	kubectl        KubectlRunner
+	customConfigs  []string
 }
 
-func NewPackageClient(bundle *packagesv1.PackageBundle, kubectl KubectlRunner, packages ...string) *PackageClient {
-	return &PackageClient{
-		bundle:   bundle,
-		packages: packages,
-		kubectl:  kubectl,
+func NewPackageClient(kubectl KubectlRunner, options ...PackageClientOpt) *PackageClient {
+	pc := &PackageClient{
+		kubectl: kubectl,
 	}
-}
-
-func (pc *PackageClient) DisplayPackages() {
-	w := new(tabwriter.Writer)
-	defer w.Flush()
-	w.Init(os.Stdout, minWidth, tabWidth, padding, padChar, flags)
-	fmt.Fprintf(w, "%s\t%s\t \n", "Package", "Version(s)")
-	fmt.Fprintf(w, "%s\t%s\t \n", "-------", "----------")
-	for _, pkg := range pc.bundle.Spec.Packages {
-		versions := convertBundleVersionToPackageVersion(pkg.Source.Versions)
-		fmt.Fprintf(w, "%s\t%s\t \n", pkg.Name, strings.Join(versions, ","))
+	for _, o := range options {
+		o(pc)
 	}
+	return pc
 }
 
-func convertBundleVersionToPackageVersion(bundleVersions []packagesv1.SourceVersion) []string {
-	var versions []string
-	for _, v := range bundleVersions {
-		versions = append(versions, v.Name)
+// sourceWithVersions is a wrapper to help get package versions.
+//
+// This should be pushed upstream to eks-anywhere-packages, then this
+// implementation can be removed.
+type sourceWithVersions packagesv1.BundlePackageSource
+
+func (s sourceWithVersions) VersionsSlice() []string {
+	versions := []string{}
+	for _, ver := range packagesv1.BundlePackageSource(s).Versions {
+		versions = append(versions, ver.Name)
 	}
 	return versions
 }
 
-func (pc *PackageClient) GeneratePackages() ([]packagesv1.Package, error) {
+// DisplayPackages pretty-prints a table of available packages.
+func (pc *PackageClient) DisplayPackages(w io.Writer) error {
+	lines := append([][]string{}, packagesHeaderLines...)
+	for _, pkg := range pc.bundle.Spec.Packages {
+		versions := sourceWithVersions(pkg.Source).VersionsSlice()
+		lines = append(lines, []string{pkg.Name, strings.Join(versions, ", ")})
+	}
+
+	tw := newCPTabwriter(w, nil)
+	defer tw.Flush()
+	return tw.writeTable(lines)
+}
+
+// packagesHeaderLines pretties-up a table of curated packages info.
+var packagesHeaderLines = [][]string{
+	{"Package", "Version(s)"},
+	{"-------", "----------"},
+}
+
+func (pc *PackageClient) GeneratePackages(clusterName string) ([]packagesv1.Package, error) {
 	packageMap := pc.packageMap()
 	var packages []packagesv1.Package
-	for _, p := range pc.packages {
+	for _, p := range pc.customPackages {
 		bundlePackage, found := packageMap[strings.ToLower(p)]
 		if !found {
 			return nil, fmt.Errorf("unknown package %q", p)
 		}
 		name := CustomName + strings.ToLower(bundlePackage.Name)
-		packages = append(packages, convertBundlePackageToPackage(bundlePackage, name, pc.bundle.APIVersion))
+		packages = append(packages, convertBundlePackageToPackage(bundlePackage, name, clusterName, pc.bundle.APIVersion, ""))
 	}
 	return packages, nil
 }
@@ -105,20 +117,33 @@ func (pc *PackageClient) packageMap() map[string]packagesv1.BundlePackage {
 	return pMap
 }
 
-func (pc *PackageClient) InstallPackage(ctx context.Context, bp *packagesv1.BundlePackage, customName string, kubeConfig string) error {
-	p := convertBundlePackageToPackage(*bp, customName, pc.bundle.APIVersion)
+func (pc *PackageClient) InstallPackage(ctx context.Context, bp *packagesv1.BundlePackage, customName string, clusterName string, kubeConfig string) error {
+	configString, err := pc.getInstallConfigurations()
+	if err != nil {
+		return err
+	}
+
+	p := convertBundlePackageToPackage(*bp, customName, clusterName, pc.bundle.APIVersion, configString)
 	displayPackage := NewDisplayablePackage(&p)
 	params := []string{"create", "-f", "-", "--kubeconfig", kubeConfig}
 	packageYaml, err := yaml.Marshal(displayPackage)
 	if err != nil {
 		return err
 	}
-	stdOut, err := pc.kubectl.CreateFromYaml(ctx, packageYaml, params...)
+	stdOut, err := pc.kubectl.ExecuteFromYaml(ctx, packageYaml, params...)
 	if err != nil {
 		return err
 	}
 	fmt.Print(&stdOut)
 	return nil
+}
+
+func (pc *PackageClient) getInstallConfigurations() (string, error) {
+	installConfigs, err := ParseConfigurations(pc.customConfigs)
+	if err != nil {
+		return "", err
+	}
+	return GenerateAllValidConfigurations(installConfigs)
 }
 
 func (pc *PackageClient) ApplyPackages(ctx context.Context, fileName string, kubeConfig string) error {
@@ -143,8 +168,8 @@ func (pc *PackageClient) CreatePackages(ctx context.Context, fileName string, ku
 	return nil
 }
 
-func (pc *PackageClient) DeletePackages(ctx context.Context, packages []string, kubeConfig string) error {
-	params := []string{"delete", "packages", "--kubeconfig", kubeConfig, "--namespace", constants.EksaPackagesName}
+func (pc *PackageClient) DeletePackages(ctx context.Context, packages []string, kubeConfig string, clusterName string) error {
+	params := []string{"delete", "packages", "--kubeconfig", kubeConfig, "--namespace", constants.EksaPackagesName + "-" + clusterName}
 	params = append(params, packages...)
 	stdOut, err := pc.kubectl.ExecuteCommand(ctx, params...)
 	if err != nil {
@@ -155,8 +180,8 @@ func (pc *PackageClient) DeletePackages(ctx context.Context, packages []string, 
 	return nil
 }
 
-func (pc *PackageClient) DescribePackages(ctx context.Context, packages []string, kubeConfig string) error {
-	params := []string{"describe", "packages", "--kubeconfig", kubeConfig, "--namespace", constants.EksaPackagesName}
+func (pc *PackageClient) DescribePackages(ctx context.Context, packages []string, kubeConfig string, clusterName string) error {
+	params := []string{"describe", "packages", "--kubeconfig", kubeConfig, "--namespace", constants.EksaPackagesName + "-" + clusterName}
 	params = append(params, packages...)
 	stdOut, err := pc.kubectl.ExecuteCommand(ctx, params...)
 	if err != nil {
@@ -170,11 +195,11 @@ func (pc *PackageClient) DescribePackages(ctx context.Context, packages []string
 	return nil
 }
 
-func convertBundlePackageToPackage(bp packagesv1.BundlePackage, name string, apiVersion string) packagesv1.Package {
+func convertBundlePackageToPackage(bp packagesv1.BundlePackage, name string, clusterName string, apiVersion string, config string) packagesv1.Package {
 	p := packagesv1.Package{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: constants.EksaPackagesName,
+			Namespace: constants.EksaPackagesName + "-" + clusterName,
 		},
 		TypeMeta: metav1.TypeMeta{
 			Kind:       kind,
@@ -182,7 +207,26 @@ func convertBundlePackageToPackage(bp packagesv1.BundlePackage, name string, api
 		},
 		Spec: packagesv1.PackageSpec{
 			PackageName: bp.Name,
+			Config:      config,
 		},
 	}
 	return p
+}
+
+func WithBundle(bundle *packagesv1.PackageBundle) func(*PackageClient) {
+	return func(config *PackageClient) {
+		config.bundle = bundle
+	}
+}
+
+func WithCustomPackages(customPackages []string) func(*PackageClient) {
+	return func(config *PackageClient) {
+		config.customPackages = customPackages
+	}
+}
+
+func WithCustomConfigs(customConfigs []string) func(*PackageClient) {
+	return func(config *PackageClient) {
+		config.customConfigs = customConfigs
+	}
 }

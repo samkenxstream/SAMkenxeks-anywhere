@@ -3,6 +3,8 @@ package clusterapi
 import (
 	"fmt"
 
+	etcdbootstrapv1 "github.com/aws/etcdadm-bootstrap-provider/api/v1beta1"
+	etcdv1 "github.com/aws/etcdadm-controller/api/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -10,9 +12,10 @@ import (
 	bootstrapv1 "sigs.k8s.io/cluster-api/bootstrap/kubeadm/api/v1beta1"
 	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 
-	"github.com/aws/eks-anywhere/pkg/api/v1alpha1"
+	anywherev1 "github.com/aws/eks-anywhere/pkg/api/v1alpha1"
 	"github.com/aws/eks-anywhere/pkg/cluster"
 	"github.com/aws/eks-anywhere/pkg/constants"
+	"github.com/aws/eks-anywhere/pkg/crypto"
 )
 
 const (
@@ -21,13 +24,15 @@ const (
 	etcdadmClusterKind        = "EtcdadmCluster"
 	kubeadmConfigTemplateKind = "KubeadmConfigTemplate"
 	machineDeploymentKind     = "MachineDeployment"
+	EKSAClusterLabelName      = "cluster.anywhere.eks.amazonaws.com/cluster-name"
+	EKSAClusterLabelNamespace = "cluster.anywhere.eks.amazonaws.com/cluster-namespace"
 )
 
 var (
 	clusterAPIVersion             = clusterv1.GroupVersion.String()
 	kubeadmControlPlaneAPIVersion = controlplanev1.GroupVersion.String()
 	bootstrapAPIVersion           = bootstrapv1.GroupVersion.String()
-	etcdClusterAPIVersion         = fmt.Sprintf("etcdcluster.%s/%s", clusterv1.GroupVersion.Group, clusterv1.GroupVersion.Version)
+	etcdAPIVersion                = etcdv1.GroupVersion.String()
 )
 
 type APIObject interface {
@@ -39,11 +44,46 @@ func InfrastructureAPIVersion() string {
 	return fmt.Sprintf("infrastructure.%s/%s", clusterv1.GroupVersion.Group, clusterv1.GroupVersion.Version)
 }
 
-func clusterLabels(clusterName string) map[string]string {
-	return map[string]string{clusterv1.ClusterLabelName: clusterName}
+func eksaClusterLabels(clusterSpec *cluster.Spec) map[string]string {
+	return map[string]string{
+		EKSAClusterLabelName:      clusterSpec.Cluster.Name,
+		EKSAClusterLabelNamespace: clusterSpec.Cluster.Namespace,
+	}
 }
 
-func Cluster(clusterSpec *cluster.Spec, infrastructureObject, controlPlaneObject APIObject) *clusterv1.Cluster {
+func capiClusterLabel(clusterSpec *cluster.Spec) map[string]string {
+	return map[string]string{
+		clusterv1.ClusterLabelName: ClusterName(clusterSpec.Cluster),
+	}
+}
+
+func capiObjectLabels(clusterSpec *cluster.Spec) map[string]string {
+	return mergeLabels(eksaClusterLabels(clusterSpec), capiClusterLabel(clusterSpec))
+}
+
+func mergeLabels(labels ...map[string]string) map[string]string {
+	size := 0
+	for _, l := range labels {
+		size += len(l)
+	}
+
+	merged := make(map[string]string, size)
+	for _, l := range labels {
+		for k, v := range l {
+			merged[k] = v
+		}
+	}
+
+	return merged
+}
+
+// ClusterName generates the CAPI cluster name for an EKSA Cluster.
+func ClusterName(cluster *anywherev1.Cluster) string {
+	return cluster.Name
+}
+
+// Cluster builds a CAPI Cluster based on an eks-a cluster spec, infrastructureObject, controlPlaneObject and unstackedEtcdObject.
+func Cluster(clusterSpec *cluster.Spec, infrastructureObject, controlPlaneObject, unstackedEtcdObject APIObject) *clusterv1.Cluster {
 	clusterName := clusterSpec.Cluster.GetName()
 	cluster := &clusterv1.Cluster{
 		TypeMeta: metav1.TypeMeta{
@@ -53,7 +93,7 @@ func Cluster(clusterSpec *cluster.Spec, infrastructureObject, controlPlaneObject
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      clusterName,
 			Namespace: constants.EksaSystemNamespace,
-			Labels:    clusterLabels(clusterName),
+			Labels:    capiObjectLabels(clusterSpec),
 		},
 		Spec: clusterv1.ClusterSpec{
 			ClusterNetwork: &clusterv1.ClusterNetwork{
@@ -78,11 +118,7 @@ func Cluster(clusterSpec *cluster.Spec, infrastructureObject, controlPlaneObject
 	}
 
 	if clusterSpec.Cluster.Spec.ExternalEtcdConfiguration != nil {
-		cluster.Spec.ManagedExternalEtcdRef = &v1.ObjectReference{
-			APIVersion: etcdClusterAPIVersion,
-			Kind:       etcdadmClusterKind,
-			Name:       clusterName,
-		}
+		setUnstackedEtcdConfigInCluster(cluster, unstackedEtcdObject)
 	}
 
 	return cluster
@@ -91,28 +127,13 @@ func Cluster(clusterSpec *cluster.Spec, infrastructureObject, controlPlaneObject
 func KubeadmControlPlane(clusterSpec *cluster.Spec, infrastructureObject APIObject) (*controlplanev1.KubeadmControlPlane, error) {
 	replicas := int32(clusterSpec.Cluster.Spec.ControlPlaneConfiguration.Count)
 
-	etcd := bootstrapv1.Etcd{}
-	if clusterSpec.Cluster.Spec.ExternalEtcdConfiguration != nil {
-		etcd.External = &bootstrapv1.ExternalEtcd{
-			Endpoints: []string{},
-		}
-	} else {
-		etcd.Local = &bootstrapv1.LocalEtcd{
-			ImageMeta: bootstrapv1.ImageMeta{
-				ImageRepository: clusterSpec.VersionsBundle.KubeDistro.Etcd.Repository,
-				ImageTag:        clusterSpec.VersionsBundle.KubeDistro.Etcd.Tag,
-			},
-			ExtraArgs: map[string]string{},
-		}
-	}
-
 	kcp := &controlplanev1.KubeadmControlPlane{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: kubeadmControlPlaneAPIVersion,
 			Kind:       kubeadmControlPlaneKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      KubeadmControlPlaneName(clusterSpec),
+			Name:      KubeadmControlPlaneName(clusterSpec.Cluster),
 			Namespace: constants.EksaSystemNamespace,
 		},
 		Spec: controlplanev1.KubeadmControlPlaneSpec{
@@ -132,7 +153,6 @@ func KubeadmControlPlane(clusterSpec *cluster.Spec, infrastructureObject APIObje
 							ImageTag:        clusterSpec.VersionsBundle.KubeDistro.CoreDNS.Tag,
 						},
 					},
-					Etcd: etcd,
 					APIServer: bootstrapv1.APIServer{
 						ControlPlaneComponent: bootstrapv1.ControlPlaneComponent{
 							ExtraArgs:    map[string]string{},
@@ -140,17 +160,26 @@ func KubeadmControlPlane(clusterSpec *cluster.Spec, infrastructureObject APIObje
 						},
 					},
 					ControllerManager: bootstrapv1.ControlPlaneComponent{
-						ExtraArgs: map[string]string{},
+						ExtraArgs:    ControllerManagerArgs(clusterSpec),
+						ExtraVolumes: []bootstrapv1.HostPathMount{},
+					},
+					Scheduler: bootstrapv1.ControlPlaneComponent{
+						ExtraArgs:    map[string]string{},
+						ExtraVolumes: []bootstrapv1.HostPathMount{},
 					},
 				},
 				InitConfiguration: &bootstrapv1.InitConfiguration{
 					NodeRegistration: bootstrapv1.NodeRegistrationOptions{
-						KubeletExtraArgs: map[string]string{},
+						KubeletExtraArgs: SecureTlsCipherSuitesExtraArgs().
+							Append(ControlPlaneNodeLabelsExtraArgs(clusterSpec.Cluster.Spec.ControlPlaneConfiguration)),
+						Taints: clusterSpec.Cluster.Spec.ControlPlaneConfiguration.Taints,
 					},
 				},
 				JoinConfiguration: &bootstrapv1.JoinConfiguration{
 					NodeRegistration: bootstrapv1.NodeRegistrationOptions{
-						KubeletExtraArgs: map[string]string{},
+						KubeletExtraArgs: SecureTlsCipherSuitesExtraArgs().
+							Append(ControlPlaneNodeLabelsExtraArgs(clusterSpec.Cluster.Spec.ControlPlaneConfiguration)),
+						Taints: clusterSpec.Cluster.Spec.ControlPlaneConfiguration.Taints,
 					},
 				},
 				PreKubeadmCommands:  []string{},
@@ -162,23 +191,23 @@ func KubeadmControlPlane(clusterSpec *cluster.Spec, infrastructureObject APIObje
 		},
 	}
 
-	if err := SetRegistryMirrorInKubeadmControlPlane(kcp, clusterSpec.Cluster.Spec.RegistryMirrorConfiguration); err != nil {
-		return nil, err
-	}
-
 	SetIdentityAuthInKubeadmControlPlane(kcp, clusterSpec)
+
+	if clusterSpec.Cluster.Spec.ExternalEtcdConfiguration == nil {
+		setStackedEtcdConfigInKubeadmControlPlane(kcp, clusterSpec.VersionsBundle.KubeDistro.Etcd)
+	}
 
 	return kcp, nil
 }
 
-func KubeadmConfigTemplate(clusterSpec *cluster.Spec, workerNodeGroupConfig v1alpha1.WorkerNodeGroupConfiguration) (*bootstrapv1.KubeadmConfigTemplate, error) {
+func KubeadmConfigTemplate(clusterSpec *cluster.Spec, workerNodeGroupConfig anywherev1.WorkerNodeGroupConfiguration) (*bootstrapv1.KubeadmConfigTemplate, error) {
 	kct := &bootstrapv1.KubeadmConfigTemplate{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: bootstrapAPIVersion,
 			Kind:       kubeadmConfigTemplateKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      workerNodeGroupConfig.Name, // TODO: diff
+			Name:      DefaultKubeadmConfigTemplateName(clusterSpec, workerNodeGroupConfig),
 			Namespace: constants.EksaSystemNamespace,
 		},
 		Spec: bootstrapv1.KubeadmConfigTemplateSpec{
@@ -196,7 +225,8 @@ func KubeadmConfigTemplate(clusterSpec *cluster.Spec, workerNodeGroupConfig v1al
 					},
 					JoinConfiguration: &bootstrapv1.JoinConfiguration{
 						NodeRegistration: bootstrapv1.NodeRegistrationOptions{
-							KubeletExtraArgs: map[string]string{},
+							KubeletExtraArgs: WorkerNodeLabelsExtraArgs(workerNodeGroupConfig),
+							Taints:           workerNodeGroupConfig.Taints,
 						},
 					},
 					PreKubeadmCommands:  []string{},
@@ -207,27 +237,25 @@ func KubeadmConfigTemplate(clusterSpec *cluster.Spec, workerNodeGroupConfig v1al
 		},
 	}
 
-	if err := SetRegistryMirrorInKubeadmConfigTemplate(kct, clusterSpec.Cluster.Spec.RegistryMirrorConfiguration); err != nil {
-		return nil, err
-	}
-
 	return kct, nil
 }
 
-func MachineDeployment(clusterSpec *cluster.Spec, workerNodeGroupConfig v1alpha1.WorkerNodeGroupConfiguration, bootstrapObject, infrastructureObject APIObject) clusterv1.MachineDeployment {
+// MachineDeployment builds a machineDeployment based on an eks-a cluster spec, workerNodeGroupConfig, bootstrapObject and infrastructureObject.
+func MachineDeployment(clusterSpec *cluster.Spec, workerNodeGroupConfig anywherev1.WorkerNodeGroupConfiguration, bootstrapObject, infrastructureObject APIObject) *clusterv1.MachineDeployment {
 	clusterName := clusterSpec.Cluster.GetName()
-	replicas := int32(workerNodeGroupConfig.Count)
+	replicas := int32(*workerNodeGroupConfig.Count)
 	version := clusterSpec.VersionsBundle.KubeDistro.Kubernetes.Tag
 
-	return clusterv1.MachineDeployment{
+	md := &clusterv1.MachineDeployment{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: clusterAPIVersion,
 			Kind:       machineDeploymentKind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      MachineDeploymentName(workerNodeGroupConfig),
-			Namespace: constants.EksaSystemNamespace,
-			Labels:    clusterLabels(clusterName),
+			Name:        MachineDeploymentName(clusterSpec.Cluster, workerNodeGroupConfig),
+			Namespace:   constants.EksaSystemNamespace,
+			Labels:      capiObjectLabels(clusterSpec),
+			Annotations: map[string]string{},
 		},
 		Spec: clusterv1.MachineDeploymentSpec{
 			ClusterName: clusterName,
@@ -236,7 +264,7 @@ func MachineDeployment(clusterSpec *cluster.Spec, workerNodeGroupConfig v1alpha1
 			},
 			Template: clusterv1.MachineTemplateSpec{
 				ObjectMeta: clusterv1.ObjectMeta{
-					Labels: clusterLabels(clusterName),
+					Labels: capiClusterLabel(clusterSpec),
 				},
 				Spec: clusterv1.MachineSpec{
 					Bootstrap: clusterv1.Bootstrap{
@@ -258,4 +286,41 @@ func MachineDeployment(clusterSpec *cluster.Spec, workerNodeGroupConfig v1alpha1
 			Replicas: &replicas,
 		},
 	}
+
+	ConfigureAutoscalingInMachineDeployment(md, workerNodeGroupConfig.AutoScalingConfiguration)
+
+	return md
+}
+
+// EtcdadmCluster builds a etcdadmCluster based on an eks-a cluster spec and infrastructureTemplate.
+func EtcdadmCluster(clusterSpec *cluster.Spec, infrastructureTemplate APIObject) *etcdv1.EtcdadmCluster {
+	replicas := int32(clusterSpec.Cluster.Spec.ExternalEtcdConfiguration.Count)
+	etcd := &etcdv1.EtcdadmCluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: etcdAPIVersion,
+			Kind:       etcdadmClusterKind,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EtcdClusterName(clusterSpec.Cluster.GetName()),
+			Namespace: constants.EksaSystemNamespace,
+		},
+		Spec: etcdv1.EtcdadmClusterSpec{
+			Replicas: &replicas,
+			EtcdadmConfigSpec: etcdbootstrapv1.EtcdadmConfigSpec{
+				EtcdadmBuiltin:     true,
+				CipherSuites:       crypto.SecureCipherSuitesString(),
+				PreEtcdadmCommands: []string{},
+			},
+			InfrastructureTemplate: v1.ObjectReference{
+				APIVersion: infrastructureTemplate.GetObjectKind().GroupVersionKind().GroupVersion().String(),
+				Kind:       infrastructureTemplate.GetObjectKind().GroupVersionKind().Kind,
+				Name:       infrastructureTemplate.GetName(),
+			},
+		},
+	}
+
+	setProxyConfigInEtcdCluster(etcd, clusterSpec.Cluster)
+	setRegistryMirrorInEtcdCluster(etcd, clusterSpec.Cluster.Spec.RegistryMirrorConfiguration)
+
+	return etcd
 }

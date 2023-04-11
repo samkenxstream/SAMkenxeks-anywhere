@@ -22,7 +22,12 @@ type EksdReleaseFetch func(ctx context.Context, name, namespace string) (*eksdv1
 
 type OIDCFetch func(ctx context.Context, name, namespace string) (*v1alpha1.OIDCConfig, error)
 
-func BuildSpecForCluster(ctx context.Context, cluster *v1alpha1.Cluster, bundlesFetch BundlesFetch, eksdReleaseFetch EksdReleaseFetch, gitOpsFetch GitOpsFetch, fluxConfigFetch FluxConfigFetch, oidcFetch OIDCFetch) (*Spec, error) {
+type AWSIamConfigFetch func(ctx context.Context, name, namespace string) (*v1alpha1.AWSIamConfig, error)
+
+// BuildSpecForCluster constructs a cluster.Spec for an eks-a cluster by retrieving all
+// necessary objects using fetch methods
+// This is deprecated in favour of BuildSpec.
+func BuildSpecForCluster(ctx context.Context, cluster *v1alpha1.Cluster, bundlesFetch BundlesFetch, eksdReleaseFetch EksdReleaseFetch, gitOpsFetch GitOpsFetch, fluxConfigFetch FluxConfigFetch, oidcFetch OIDCFetch, awsIamConfigFetch AWSIamConfigFetch) (*Spec, error) {
 	bundles, err := GetBundlesForCluster(ctx, cluster, bundlesFetch)
 	if err != nil {
 		return nil, err
@@ -55,16 +60,56 @@ func BuildSpecForCluster(ctx context.Context, cluster *v1alpha1.Cluster, bundles
 	if err != nil {
 		return nil, err
 	}
-	return BuildSpecFromBundles(cluster, bundles, WithEksdRelease(eksd), WithGitOpsConfig(gitOpsConfig), WithFluxConfig(fluxConfig), WithOIDCConfig(oidcConfig))
+	awsIamConfig, err := GetAWSIamConfigForCluster(ctx, cluster, awsIamConfigFetch)
+	if err != nil {
+		return nil, err
+	}
+
+	// This Config is incomplete, if you need the whole thing use [BuildSpec]
+	config := &Config{
+		Cluster:      cluster,
+		GitOpsConfig: gitOpsConfig,
+		FluxConfig:   fluxConfig,
+	}
+
+	if oidcConfig != nil {
+		config.OIDCConfigs = map[string]*v1alpha1.OIDCConfig{
+			oidcConfig.Name: oidcConfig,
+		}
+	}
+
+	if awsIamConfig != nil {
+		config.AWSIAMConfigs = map[string]*v1alpha1.AWSIamConfig{
+			awsIamConfig.Name: awsIamConfig,
+		}
+	}
+
+	return NewSpec(config, bundles, eksd)
 }
 
 func GetBundlesForCluster(ctx context.Context, cluster *v1alpha1.Cluster, fetch BundlesFetch) (*v1alpha1release.Bundles, error) {
-	bundles, err := fetch(ctx, cluster.Name, cluster.Namespace)
+	name, namespace := bundlesNamespacedKey(cluster)
+	bundles, err := fetch(ctx, name, namespace)
 	if err != nil {
-		return nil, fmt.Errorf("failed fetching Bundles for cluster: %v", err)
+		return nil, fmt.Errorf("fetching Bundles for cluster: %v", err)
 	}
 
 	return bundles, nil
+}
+
+func bundlesNamespacedKey(cluster *v1alpha1.Cluster) (name, namespace string) {
+	if cluster.Spec.BundlesRef != nil {
+		name = cluster.Spec.BundlesRef.Name
+		namespace = cluster.Spec.BundlesRef.Namespace
+	} else {
+		// Handles old clusters that don't contain a reference yet to the Bundles
+		// For those clusters, the Bundles was created with the same name as the cluster
+		// and in the same namespace
+		name = cluster.Name
+		namespace = cluster.Namespace
+	}
+
+	return name, namespace
 }
 
 func GetFluxConfigForCluster(ctx context.Context, cluster *v1alpha1.Cluster, fetch FluxConfigFetch) (*v1alpha1.FluxConfig, error) {
@@ -106,12 +151,16 @@ func GetEksdReleaseForCluster(ctx context.Context, cluster *v1alpha1.Cluster, bu
 }
 
 func GetVersionsBundle(clusterConfig *v1alpha1.Cluster, bundles *v1alpha1release.Bundles) (*v1alpha1release.VersionsBundle, error) {
+	return getVersionsBundleForKubernetesVersion(clusterConfig.Spec.KubernetesVersion, bundles)
+}
+
+func getVersionsBundleForKubernetesVersion(kubernetesVersion v1alpha1.KubernetesVersion, bundles *v1alpha1release.Bundles) (*v1alpha1release.VersionsBundle, error) {
 	for _, versionsBundle := range bundles.Spec.VersionsBundles {
-		if versionsBundle.KubeVersion == string(clusterConfig.Spec.KubernetesVersion) {
+		if versionsBundle.KubeVersion == string(kubernetesVersion) {
 			return &versionsBundle, nil
 		}
 	}
-	return nil, fmt.Errorf("kubernetes version %s is not supported by bundles manifest %d", clusterConfig.Spec.KubernetesVersion, bundles.Spec.Number)
+	return nil, fmt.Errorf("kubernetes version %s is not supported by bundles manifest %d", kubernetesVersion, bundles.Spec.Number)
 }
 
 func GetOIDCForCluster(ctx context.Context, cluster *v1alpha1.Cluster, fetch OIDCFetch) (*v1alpha1.OIDCConfig, error) {
@@ -129,4 +178,56 @@ func GetOIDCForCluster(ctx context.Context, cluster *v1alpha1.Cluster, fetch OID
 		}
 	}
 	return nil, nil
+}
+
+func GetAWSIamConfigForCluster(ctx context.Context, cluster *v1alpha1.Cluster, fetch AWSIamConfigFetch) (*v1alpha1.AWSIamConfig, error) {
+	if fetch == nil || cluster.Spec.IdentityProviderRefs == nil {
+		return nil, nil
+	}
+
+	for _, identityProvider := range cluster.Spec.IdentityProviderRefs {
+		if identityProvider.Kind == v1alpha1.AWSIamConfigKind {
+			awsIamConfig, err := fetch(ctx, identityProvider.Name, cluster.Namespace)
+			if err != nil {
+				return nil, fmt.Errorf("failed fetching AWSIamConfig for cluster: %v", err)
+			}
+			return awsIamConfig, nil
+		}
+	}
+	return nil, nil
+}
+
+// BuildSpec constructs a cluster.Spec for an eks-a cluster by retrieving all
+// necessary objects from the cluster using a kubernetes client.
+func BuildSpec(ctx context.Context, client Client, cluster *v1alpha1.Cluster) (*Spec, error) {
+	configBuilder := NewDefaultConfigClientBuilder()
+	config, err := configBuilder.Build(ctx, client, cluster)
+	if err != nil {
+		return nil, err
+	}
+
+	return BuildSpecFromConfig(ctx, client, config)
+}
+
+// BuildSpecFromConfig constructs a cluster.Spec for an eks-a cluster config by retrieving all dependencies objects from the cluster using a kubernetes client.
+func BuildSpecFromConfig(ctx context.Context, client Client, config *Config) (*Spec, error) {
+	bundlesName, bundlesNamespace := bundlesNamespacedKey(config.Cluster)
+	bundles := &v1alpha1release.Bundles{}
+	if err := client.Get(ctx, bundlesName, bundlesNamespace, bundles); err != nil {
+		return nil, err
+	}
+
+	versionsBundle, err := GetVersionsBundle(config.Cluster, bundles)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ideally we would use the same namespace as the Bundles, but Bundles can be in any namespace and
+	// the eksd release is always in eksa-system
+	eksdRelease := &eksdv1alpha1.Release{}
+	if err = client.Get(ctx, versionsBundle.EksD.Name, constants.EksaSystemNamespace, eksdRelease); err != nil {
+		return nil, err
+	}
+
+	return NewSpec(config, bundles, eksdRelease)
 }

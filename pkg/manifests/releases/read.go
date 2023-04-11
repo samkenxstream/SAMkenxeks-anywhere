@@ -3,6 +3,7 @@ package releases
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
 	"sigs.k8s.io/yaml"
 
 	"github.com/aws/eks-anywhere/pkg/manifests/bundles"
@@ -11,8 +12,8 @@ import (
 )
 
 // manifestURL holds the url to the eksa releases manifest
-// this is injected at build time, this is just a sane default for development
-var manifestURL = "https://dev-release-prod-pdx.s3.us-west-2.amazonaws.com/eks-a-release.yaml"
+// this is injected at build time, this is just a sane default for development.
+var manifestURL = "https://dev-release-assets.eks-anywhere.model-rocket.aws.dev/eks-a-release.yaml"
 
 func ManifestURL() string {
 	return manifestURL
@@ -29,7 +30,7 @@ func ReadReleases(reader Reader) (*releasev1.Release, error) {
 func ReadReleasesFromURL(reader Reader, url string) (*releasev1.Release, error) {
 	content, err := reader.ReadFile(url)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "reading Releases file")
 	}
 
 	release := &releasev1.Release{}

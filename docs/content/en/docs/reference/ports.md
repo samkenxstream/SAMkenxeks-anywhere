@@ -1,6 +1,6 @@
 ---
 title: "Ports and protocols"
-weight: 55
+weight: 60
 description: >
   Ports used with an EKS Anywhere cluster
 ---
@@ -43,7 +43,7 @@ The following table represents the ports published by the Kubernetes project tha
 | Protocol | Direction | Port Range  | Purpose               | Used By                 |
 |----------|-----------|-------------|-----------------------|-------------------------|
 | TCP      | Inbound   | 10250       | Kubelet API           | Self, Control plane     |
-| TCP      | Inbound   | 30000-32767 | [NodePort Services](/docs/concepts/services-networking/service/)    | All                     |
+| TCP      | Inbound   | 30000-32767 | [NodePort Services](https://kubernetes.io/docs/concepts/services-networking/service/#type-nodeport)    | All                     |
 
 The API server port that is sometimes switched to 443.
 Alternatively, the default port is kept as is and API server is put behind a load balancer that listens on 443 and routes the requests to API server on the default port.
@@ -53,6 +53,20 @@ Use the following to access the SSH service on the worker nodes:
 | Protocol | Direction | Port Range | Purpose                 | Used By                   |
 |----------|-----------|------------|-------------------------|---------------------------|
 | TCP      | Inbound   | 22         | SSHD server             | SSH clients               |
+
+## Bare Metal provider
+
+On the Admin machine for a Bare Metal provider, the following ports need to be accessible to all the nodes in the cluster, from the same level 2 network, for initially network booting:
+
+| Protocol | Direction | Port Range | Purpose                 | Used By                       |
+|----------|-----------|------------|-------------------------|------------------------------ |
+| UDP      | Inbound   | 67         | Boots DHCP              | All nodes, for network boot   |
+| UDP      | Inbound   | 69         | Boots TFTP              | All nodes, for network boot   |
+| TCP      | Inbound   | 80         | Boots HTTP              | All nodes, for network boot   |
+| TCP      | Inbound   | 42113      | Tink-server gRPC        | All nodes, talk to Tinkerbell |
+| TCP      | Inbound   | 50061      | Hegel HTTP              | All nodes, talk to Tinkerbell |
+| TCP      | Outbound  | 623        | Rufio IPMI              | All nodes, out-of-band power and next boot ([optional]({{< relref "baremetal/bare-prereq/#network-requirements" >}})) |
+| TCP      | Outbound  | 80,443     | Rufio Redfish           | All nodes, out-of-band power and next boot ([optional]({{< relref "baremetal/bare-prereq/#network-requirements" >}})) |
 
 ## VMware provider
 
@@ -65,6 +79,29 @@ The following table displays ports that need to be accessible from the VMware pr
 | TCP      | Inbound   | 6443        | Kubernetes API server   | Kubernetes API endpoint |
 | TCP      | Inbound   | 2379        | Manager                 | Etcd API endpoint       |
 | TCP      | Inbound   | 2380        | Manager                 | Etcd API endpoint       |
+
+## Nutanix provider
+
+The following table displays ports that need to be accessible from the Nutanix provider running EKS Anywhere:
+
+| Protocol | Direction | Port Range  | Purpose                 | Used By                    |
+|----------|-----------|-------------|-------------------------|----------------------------|
+| TCP      | Inbound   | 9440        | Prism Central Server    | Prism Central API endpoint |
+| TCP      | Inbound   | 6443        | Kubernetes API server   | Kubernetes API endpoint    |
+| TCP      | Inbound   | 2379        | Manager                 | Etcd API endpoint          |
+| TCP      | Inbound   | 2380        | Manager                 | Etcd API endpoint          |
+
+## Snow provider
+
+In addition to the [Ports Required to Use AWS Services on an AWS Snowball Edge Device](https://docs.aws.amazon.com/snowball/latest/developer-guide/port-requirements.html), the following table displays ports that need to be accessible from the Snow provider running EKS Anywhere:
+
+| Protocol | Direction | Port Range  | Purpose                 | Used By                           |
+|----------|-----------|-------------|-------------------------|-----------------------------------|
+| TCP      | Inbound   | 9092        | Device Controller       | EKS Anywhere and CAPAS controller |
+| TCP      | Inbound   | 8242        | EC2 HTTPS endpoint      | EKS Anywhere and CAPAS controller |
+| TCP      | Inbound   | 6443        | Kubernetes API server   | Kubernetes API endpoint           |
+| TCP      | Inbound   | 2379        | Manager                 | Etcd API endpoint                 |
+| TCP      | Inbound   | 2380        | Manager                 | Etcd API endpoint                 |
 
 ## Control plane management tools
 

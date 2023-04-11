@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/aws/eks-anywhere/pkg/api/v1alpha1"
+	"github.com/aws/eks-anywhere/pkg/config"
 	"github.com/aws/eks-anywhere/pkg/filewriter"
 	"github.com/aws/eks-anywhere/pkg/logger"
 	"github.com/aws/eks-anywhere/pkg/retrier"
@@ -30,19 +31,27 @@ const (
 	govcPasswordKey      = "GOVC_PASSWORD"
 	govcURLKey           = "GOVC_URL"
 	govcInsecure         = "GOVC_INSECURE"
+	govcDatacenterKey    = "GOVC_DATACENTER"
 	govcTlsHostsFile     = "govc_known_hosts"
 	govcTlsKnownHostsKey = "GOVC_TLS_KNOWN_HOSTS"
-	vSphereUsernameKey   = "EKSA_VSPHERE_USERNAME"
-	vSpherePasswordKey   = "EKSA_VSPHERE_PASSWORD"
 	vSphereServerKey     = "VSPHERE_SERVER"
 	byteToGiB            = 1073741824.0
-	deployOptsFile       = "deploy-opts.json"
+	DeployOptsFile       = "deploy-opts.json"
+	disk1                = "Hard disk 1"
+	disk2                = "Hard disk 2"
 )
 
-var requiredEnvs = []string{govcUsernameKey, govcPasswordKey, govcURLKey, govcInsecure}
+var requiredEnvs = []string{govcUsernameKey, govcPasswordKey, govcURLKey, govcInsecure, govcDatacenterKey}
 
-//go:embed config/deploy-opts.json
-var deployOpts []byte
+type networkMapping struct {
+	Name    string `json:"Name,omitempty"`
+	Network string `json:"Network,omitempty"`
+}
+
+type deployOption struct {
+	DiskProvisioning string           `json:"DiskProvisioning,omitempty"`
+	NetworkMapping   []networkMapping `json:"NetworkMapping,omitempty"`
+}
 
 type FolderType string
 
@@ -56,19 +65,34 @@ const (
 type Govc struct {
 	writer filewriter.FileWriter
 	Executable
-	retrier      *retrier.Retrier
+	*retrier.Retrier
 	requiredEnvs *syncSlice
+	envMap       map[string]string
 }
 
-func NewGovc(executable Executable, writer filewriter.FileWriter) *Govc {
+type GovcOpt func(*Govc)
+
+func NewGovc(executable Executable, writer filewriter.FileWriter, opts ...GovcOpt) *Govc {
 	envVars := newSyncSlice()
 	envVars.append(requiredEnvs...)
 
-	return &Govc{
+	g := &Govc{
 		writer:       writer,
 		Executable:   executable,
-		retrier:      retrier.NewWithMaxRetries(maxRetries, backOffPeriod),
+		Retrier:      retrier.NewWithMaxRetries(maxRetries, backOffPeriod),
 		requiredEnvs: envVars,
+	}
+
+	for _, opt := range opts {
+		opt(g)
+	}
+
+	return g
+}
+
+func WithGovcEnvMap(envMap map[string]string) GovcOpt {
+	return func(g *Govc) {
+		g.envMap = envMap
 	}
 }
 
@@ -104,9 +128,18 @@ func (g *Govc) Logout(ctx context.Context) error {
 	return nil
 }
 
-func (g *Govc) SearchTemplate(ctx context.Context, datacenter string, machineConfig *v1alpha1.VSphereMachineConfig) (string, error) {
-	params := []string{"find", "-json", "/" + datacenter, "-type", "VirtualMachine", "-name", filepath.Base(machineConfig.Spec.Template)}
-	templateResponse, err := g.exec(ctx, params...)
+// SearchTemplate looks for a vm template with the same base name as the provided template path.
+// If found, it returns the full qualified path to the template.
+// If multiple matching templates are found, it returns an error.
+func (g *Govc) SearchTemplate(ctx context.Context, datacenter, template string) (string, error) {
+	params := []string{"find", "-json", "/" + datacenter, "-type", "VirtualMachine", "-name", filepath.Base(template)}
+
+	var templateResponse bytes.Buffer
+	var err error
+	err = g.Retry(func() error {
+		templateResponse, err = g.exec(ctx, params...)
+		return err
+	})
 	if err != nil {
 		return "", fmt.Errorf("getting template: %v", err)
 	}
@@ -114,7 +147,7 @@ func (g *Govc) SearchTemplate(ctx context.Context, datacenter string, machineCon
 	templateJson := templateResponse.String()
 	templateJson = strings.TrimSuffix(templateJson, "\n")
 	if templateJson == "null" || templateJson == "" {
-		logger.V(2).Info(fmt.Sprintf("Template not found: %s", machineConfig.Spec.Template))
+		logger.V(2).Info(fmt.Sprintf("Template not found: %s", template))
 		return "", nil
 	}
 
@@ -127,16 +160,16 @@ func (g *Govc) SearchTemplate(ctx context.Context, datacenter string, machineCon
 	bTemplateFound := false
 	var foundTemplate string
 	for _, t := range templateInfo {
-		if strings.HasSuffix(t, machineConfig.Spec.Template) {
+		if strings.HasSuffix(t, template) {
 			if bTemplateFound {
-				return "", fmt.Errorf("specified template '%s' maps to multiple paths within the datacenter '%s'", machineConfig.Spec.Template, datacenter)
+				return "", fmt.Errorf("specified template '%s' maps to multiple paths within the datacenter '%s'", template, datacenter)
 			}
 			bTemplateFound = true
 			foundTemplate = t
 		}
 	}
 	if !bTemplateFound {
-		logger.V(2).Info(fmt.Sprintf("Template '%s' not found", machineConfig.Spec.Template))
+		logger.V(2).Info(fmt.Sprintf("Template '%s' not found", template))
 		return "", nil
 	}
 
@@ -196,18 +229,72 @@ func (g *Govc) ResizeDisk(ctx context.Context, datacenter, template, diskName st
 	return nil
 }
 
-func (g *Govc) DevicesInfo(ctx context.Context, datacenter, template string) (interface{}, error) {
-	response, err := g.exec(ctx, "device.info", "-dc", datacenter, "-vm", template, "-json")
+type deviceInfoResponse struct {
+	Devices []VirtualDevice
+}
+
+// VirtualDevice describes a virtual device for a VM.
+type VirtualDevice struct {
+	Name         string
+	DeviceInfo   deviceInfo
+	CapacityInKB float64
+}
+
+type deviceInfo struct {
+	Label string
+}
+
+// DevicesInfo returns the device info for te provided virtual machine.
+func (g *Govc) DevicesInfo(ctx context.Context, datacenter, template string, args ...string) ([]VirtualDevice, error) {
+	params := []string{"device.info", "-dc", datacenter, "-vm", template, "-json"}
+	params = append(params, args...)
+	response, err := g.exec(ctx, params...)
 	if err != nil {
 		return nil, fmt.Errorf("getting template device information: %v", err)
 	}
 
-	var devicesInfo map[string]interface{}
+	var devicesInfo deviceInfoResponse
 	err = yaml.Unmarshal(response.Bytes(), &devicesInfo)
 	if err != nil {
 		return nil, fmt.Errorf("unmarshalling devices info: %v", err)
 	}
-	return devicesInfo["Devices"], nil
+	return devicesInfo.Devices, nil
+}
+
+// GetVMDiskSizeInGB returns the size of the first disk on the VM in GB.
+func (g *Govc) GetVMDiskSizeInGB(ctx context.Context, vm, datacenter string) (int, error) {
+	devicesInfo, err := g.DevicesInfo(ctx, datacenter, vm, "disk-*")
+	if err != nil {
+		return 0, fmt.Errorf("getting disk size for vm %s: %v", vm, err)
+	}
+
+	if len(devicesInfo) == 0 {
+		return 0, fmt.Errorf("no disks found for vm %s", vm)
+	}
+
+	return int(devicesInfo[0].CapacityInKB / 1024 / 1024), nil
+}
+
+// GetHardDiskSize returns the size of all the hard disks for given VM.
+func (g *Govc) GetHardDiskSize(ctx context.Context, vm, datacenter string) (map[string]float64, error) {
+	devicesInfo, err := g.DevicesInfo(ctx, datacenter, vm, "disk-*")
+	if err != nil {
+		return nil, fmt.Errorf("getting hard disk sizes for vm %s: %v", vm, err)
+	}
+
+	if len(devicesInfo) == 0 {
+		return nil, fmt.Errorf("no hard disks found for vm %s", vm)
+	}
+
+	hardDiskMap := make(map[string]float64)
+	for _, deviceInfo := range devicesInfo {
+		if strings.EqualFold(deviceInfo.DeviceInfo.Label, disk1) {
+			hardDiskMap[disk1] = deviceInfo.CapacityInKB
+		} else if strings.EqualFold(deviceInfo.DeviceInfo.Label, disk2) {
+			hardDiskMap[disk2] = deviceInfo.CapacityInKB
+		}
+	}
+	return hardDiskMap, nil
 }
 
 func (g *Govc) TemplateHasSnapshot(ctx context.Context, template string) (bool, error) {
@@ -263,9 +350,10 @@ func (g *Govc) CreateLibrary(ctx context.Context, datastore, library string) err
 	return nil
 }
 
-func (g *Govc) DeployTemplateFromLibrary(ctx context.Context, templateDir, templateName, library, datacenter, datastore, resourcePool string, resizeBRDisk bool) error {
+func (g *Govc) DeployTemplateFromLibrary(ctx context.Context, templateDir, templateName, library, datacenter, datastore, network, resourcePool string, resizeBRDisk bool) error {
 	logger.V(4).Info("Deploying template", "dir", templateDir, "templateName", templateName)
-	if err := g.deployTemplate(ctx, library, templateName, templateDir, datacenter, datastore, resourcePool); err != nil {
+
+	if err := g.DeployTemplate(ctx, library, templateName, templateName, templateDir, datacenter, datastore, network, resourcePool, nil); err != nil {
 		return err
 	}
 
@@ -283,14 +371,13 @@ func (g *Govc) DeployTemplateFromLibrary(ctx context.Context, templateDir, templ
 		// checks based on the label.
 		disk1 := ""
 		disk2 := ""
-		for _, deviceInfo := range devicesInfo.([]interface{}) {
-			deviceMetadata := deviceInfo.(map[string]interface{})["DeviceInfo"]
-			deviceLabel := deviceMetadata.(map[string]interface{})["Label"].(string)
+		for _, device := range devicesInfo {
+			deviceLabel := device.DeviceInfo.Label
 			// Get the name of the hard disk and resize the disk to 20G
 			if strings.EqualFold(deviceLabel, "Hard disk 1") {
-				disk1 = deviceInfo.(map[string]interface{})["Name"].(string)
+				disk1 = device.Name
 			} else if strings.EqualFold(deviceLabel, "Hard disk 2") {
-				disk2 = deviceInfo.(map[string]interface{})["Name"].(string)
+				disk2 = device.Name
 				break
 			}
 		}
@@ -310,7 +397,7 @@ func (g *Govc) DeployTemplateFromLibrary(ctx context.Context, templateDir, templ
 
 		err = g.ResizeDisk(ctx, datacenter, templateName, diskName, diskSizeInGB)
 		if err != nil {
-			return fmt.Errorf("resizing disk %v to 20G: %v", diskName, err)
+			return fmt.Errorf("resizing disk %v to %dG: %v", diskName, diskSizeInGB, err)
 		}
 	}
 
@@ -337,7 +424,7 @@ func (g *Govc) ImportTemplate(ctx context.Context, library, ovaURL, name string)
 	return nil
 }
 
-func (g *Govc) deployTemplate(ctx context.Context, library, templateName, deployFolder, datacenter, datastore, resourcePool string) error {
+func (g *Govc) DeployTemplate(ctx context.Context, library, templateName, vmName, deployFolder, datacenter, datastore, network, resourcePool string, deployOptionsOverride []byte) error {
 	envMap, err := g.validateAndSetupCreds()
 	if err != nil {
 		return fmt.Errorf("failed govc validations: %v", err)
@@ -348,14 +435,23 @@ func (g *Govc) deployTemplate(ctx context.Context, library, templateName, deploy
 		templateInLibraryPath = fmt.Sprintf("/%s", templateInLibraryPath)
 	}
 
-	deployOptsPath, err := g.writer.Write(deployOptsFile, deployOpts, filewriter.PersistentFile)
+	deployOpts, err := getDeployOptions(network)
+	if err != nil {
+		return err
+	}
+
+	if len(deployOptionsOverride) > 0 {
+		deployOpts = deployOptionsOverride
+	}
+
+	deployOptsPath, err := g.writer.Write(DeployOptsFile, deployOpts, filewriter.PersistentFile)
 	if err != nil {
 		return fmt.Errorf("failed writing deploy options file to disk: %v", err)
 	}
 
 	bFolderNotFound := false
 	params := []string{"folder.info", deployFolder}
-	err = g.retrier.Retry(func() error {
+	err = g.Retry(func() error {
 		errBuffer, err := g.ExecuteWithEnv(ctx, envMap, params...)
 		errString := strings.ToLower(errBuffer.String())
 		if err != nil {
@@ -369,7 +465,7 @@ func (g *Govc) deployTemplate(ctx context.Context, library, templateName, deploy
 	})
 	if err != nil || bFolderNotFound {
 		params = []string{"folder.create", deployFolder}
-		err = g.retrier.Retry(func() error {
+		err = g.Retry(func() error {
 			errBuffer, err := g.ExecuteWithEnv(ctx, envMap, params...)
 			errString := strings.ToLower(errBuffer.String())
 			if err != nil && !strings.Contains(errString, "already exists") {
@@ -389,7 +485,7 @@ func (g *Govc) deployTemplate(ctx context.Context, library, templateName, deploy
 		"-pool", resourcePool,
 		"-folder", deployFolder,
 		"-options", deployOptsPath,
-		templateInLibraryPath, templateName,
+		templateInLibraryPath, vmName,
 	}
 	if _, err := g.exec(ctx, params...); err != nil {
 		return fmt.Errorf("deploying template: %v", err)
@@ -448,6 +544,10 @@ func (g *Govc) markVMAsTemplate(ctx context.Context, datacenter, vmName string) 
 }
 
 func (g *Govc) getEnvMap() (map[string]string, error) {
+	if g.envMap != nil {
+		return g.envMap, nil
+	}
+
 	envMap := make(map[string]string)
 	for key := range g.requiredEnvs.iterate() {
 		if env, ok := os.LookupEnv(key); ok && len(env) > 0 {
@@ -467,17 +567,21 @@ func (g *Govc) getEnvMap() (map[string]string, error) {
 }
 
 func (g *Govc) validateAndSetupCreds() (map[string]string, error) {
+	if g.envMap != nil {
+		return g.envMap, nil
+	}
+
 	var vSphereUsername, vSpherePassword, vSphereURL string
 	var ok bool
 	var envMap map[string]string
-	if vSphereUsername, ok = os.LookupEnv(vSphereUsernameKey); ok && len(vSphereUsername) > 0 {
+	if vSphereUsername, ok = os.LookupEnv(config.EksavSphereUsernameKey); ok && len(vSphereUsername) > 0 {
 		if err := os.Setenv(govcUsernameKey, vSphereUsername); err != nil {
 			return nil, fmt.Errorf("unable to set %s: %v", govcUsernameKey, err)
 		}
 	} else if govcUsername, ok := os.LookupEnv(govcUsernameKey); !ok || len(govcUsername) <= 0 {
 		return nil, fmt.Errorf("%s is not set or is empty: %t", govcUsernameKey, ok)
 	}
-	if vSpherePassword, ok = os.LookupEnv(vSpherePasswordKey); ok && len(vSpherePassword) > 0 {
+	if vSpherePassword, ok = os.LookupEnv(config.EksavSpherePasswordKey); ok && len(vSpherePassword) > 0 {
 		if err := os.Setenv(govcPasswordKey, vSpherePassword); err != nil {
 			return nil, fmt.Errorf("unable to set %s: %v", govcPasswordKey, err)
 		}
@@ -491,6 +595,10 @@ func (g *Govc) validateAndSetupCreds() (map[string]string, error) {
 	} else if govcURL, ok := os.LookupEnv(govcURLKey); !ok || len(govcURL) <= 0 {
 		return nil, fmt.Errorf("%s is not set or is empty: %t", govcURLKey, ok)
 	}
+	if govcDatacenter, ok := os.LookupEnv(govcDatacenterKey); !ok || len(govcDatacenter) <= 0 {
+		return nil, fmt.Errorf("%s is not set or is empty: %t", govcDatacenterKey, ok)
+	}
+
 	envMap, err := g.getEnvMap()
 	if err != nil {
 		return nil, fmt.Errorf("%v", err)
@@ -508,7 +616,7 @@ func (g *Govc) CleanupVms(ctx context.Context, clusterName string, dryRun bool) 
 	var params []string
 	var result bytes.Buffer
 
-	params = strings.Fields("find -type VirtualMachine -name " + clusterName + "*")
+	params = strings.Fields("find /" + envMap[govcDatacenterKey] + " -type VirtualMachine -name " + clusterName + "*")
 	result, err = g.ExecuteWithEnv(ctx, envMap, params...)
 	if err != nil {
 		return fmt.Errorf("getting vm list: %v", err)
@@ -521,10 +629,18 @@ func (g *Govc) CleanupVms(ctx context.Context, clusterName string, dryRun bool) 
 			continue
 		}
 		params = strings.Fields("vm.power -off -force " + vmName)
-		result, _ = g.ExecuteWithEnv(ctx, envMap, params...)
+		result, err = g.ExecuteWithEnv(ctx, envMap, params...)
+		if err != nil {
+			logger.Info("WARN: Failed to power off vm ", "vm_name", vmName, "error", err)
+		}
+
 		params = strings.Fields("object.destroy " + vmName)
-		result, _ = g.ExecuteWithEnv(ctx, envMap, params...)
-		logger.Info("Deleted ", "vm_name", vmName)
+		result, err = g.ExecuteWithEnv(ctx, envMap, params...)
+		if err != nil {
+			logger.Info("WARN: Failed to delete vm ", "vm_name", vmName, "error", err)
+		} else {
+			logger.Info("Deleted ", "vm_name", vmName)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -546,7 +662,7 @@ func (g *Govc) ValidateVCenterConnection(ctx context.Context, server string) err
 }
 
 func (g *Govc) ValidateVCenterAuthentication(ctx context.Context) error {
-	err := g.retrier.Retry(func() error {
+	err := g.Retry(func() error {
 		_, err := g.exec(ctx, "about", "-k")
 		return err
 	})
@@ -593,7 +709,7 @@ func (g *Govc) ConfigureCertThumbprint(ctx context.Context, server, thumbprint s
 
 func (g *Govc) DatacenterExists(ctx context.Context, datacenter string) (bool, error) {
 	exists := false
-	err := g.retrier.Retry(func() error {
+	err := g.Retry(func() error {
 		result, err := g.exec(ctx, "datacenter.info", datacenter)
 		if err == nil {
 			exists = true
@@ -617,7 +733,7 @@ func (g *Govc) DatacenterExists(ctx context.Context, datacenter string) (bool, e
 func (g *Govc) NetworkExists(ctx context.Context, network string) (bool, error) {
 	exists := false
 
-	err := g.retrier.Retry(func() error {
+	err := g.Retry(func() error {
 		networkResponse, err := g.exec(ctx, "find", "-maxdepth=1", filepath.Dir(network), "-type", "n", "-name", filepath.Base(network))
 		if err != nil {
 			return err
@@ -632,7 +748,7 @@ func (g *Govc) NetworkExists(ctx context.Context, network string) (bool, error) 
 		return nil
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed checking '%s' network", filepath.Base(network))
+		return false, fmt.Errorf("failed checking if network '%s' exists: %v", network, err)
 	}
 
 	return exists, nil
@@ -648,7 +764,7 @@ func (g *Govc) ValidateVCenterSetupMachineConfig(ctx context.Context, datacenter
 		return err
 	}
 	params := []string{"datastore.info", machineConfig.Spec.Datastore}
-	err = g.retrier.Retry(func() error {
+	err = g.Retry(func() error {
 		_, err = g.ExecuteWithEnv(ctx, envMap, params...)
 		if err != nil {
 			datastorePath := filepath.Dir(machineConfig.Spec.Datastore)
@@ -673,7 +789,7 @@ func (g *Govc) ValidateVCenterSetupMachineConfig(ctx context.Context, datacenter
 			return err
 		}
 		params = []string{"folder.info", machineConfig.Spec.Folder}
-		err = g.retrier.Retry(func() error {
+		err = g.Retry(func() error {
 			_, err := g.ExecuteWithEnv(ctx, envMap, params...)
 			if err != nil {
 				err = g.createFolder(ctx, envMap, machineConfig)
@@ -699,7 +815,7 @@ func (g *Govc) ValidateVCenterSetupMachineConfig(ctx context.Context, datacenter
 
 	var poolInfoResponse bytes.Buffer
 	params = []string{"find", "-json", "/" + datacenterConfig.Spec.Datacenter, "-type", "p", "-name", filepath.Base(machineConfig.Spec.ResourcePool)}
-	err = g.retrier.Retry(func() error {
+	err = g.Retry(func() error {
 		poolInfoResponse, err = g.ExecuteWithEnv(ctx, envMap, params...)
 		return err
 	})
@@ -756,7 +872,7 @@ func prependPath(folderType FolderType, folderPath string, datacenter string) (s
 
 func (g *Govc) createFolder(ctx context.Context, envMap map[string]string, machineConfig *v1alpha1.VSphereMachineConfig) error {
 	params := []string{"folder.create", machineConfig.Spec.Folder}
-	err := g.retrier.Retry(func() error {
+	err := g.Retry(func() error {
 		_, err := g.ExecuteWithEnv(ctx, envMap, params...)
 		if err != nil {
 			return fmt.Errorf("creating folder: %v", err)
@@ -773,7 +889,12 @@ func (g *Govc) isValidPath(ctx context.Context, envMap map[string]string, path s
 }
 
 func (g *Govc) GetTags(ctx context.Context, path string) ([]string, error) {
-	tagsResponse, err := g.exec(ctx, "tags.attached.ls", "-json", "-r", path)
+	var tagsResponse bytes.Buffer
+	var err error
+	err = g.Retry(func() error {
+		tagsResponse, err = g.exec(ctx, "tags.attached.ls", "-json", "-r", path)
+		return err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("govc returned error when listing tags for %s: %v", path, err)
 	}
@@ -791,13 +912,15 @@ func (g *Govc) GetTags(ctx context.Context, path string) ([]string, error) {
 	return tags, nil
 }
 
-type tag struct {
+// Tag struct to represent a vSphere Tag.
+type Tag struct {
 	Id         string
 	Name       string
 	CategoryId string `json:"category_id,omitempty"`
 }
 
-func (g *Govc) ListTags(ctx context.Context) ([]string, error) {
+// ListTags list all vSphere tags in vCenter.
+func (g *Govc) ListTags(ctx context.Context) ([]Tag, error) {
 	tagsResponse, err := g.exec(ctx, "tags.ls", "-json")
 	if err != nil {
 		return nil, fmt.Errorf("govc returned error when listing tags: %v", err)
@@ -808,17 +931,12 @@ func (g *Govc) ListTags(ctx context.Context) ([]string, error) {
 		return nil, nil
 	}
 
-	tags := make([]tag, 0)
+	tags := make([]Tag, 0)
 	if err = json.Unmarshal([]byte(tagsJson), &tags); err != nil {
 		return nil, fmt.Errorf("failed unmarshalling govc response from list tags: %v", err)
 	}
 
-	tagNames := make([]string, 0, len(tags))
-	for _, t := range tags {
-		tagNames = append(tagNames, t.Name)
-	}
-
-	return tagNames, nil
+	return tags, nil
 }
 
 func (g *Govc) AddTag(ctx context.Context, path, tag string) error {
@@ -884,5 +1002,144 @@ func (g *Govc) createCategory(ctx context.Context, name string, objectTypes []ob
 	if _, err := g.exec(ctx, params...); err != nil {
 		return fmt.Errorf("govc returned error when creating category %s: %v", name, err)
 	}
+	return nil
+}
+
+func getDeployOptions(network string) ([]byte, error) {
+	deployOptsStruct := deployOption{
+		DiskProvisioning: "thin",
+		NetworkMapping: []networkMapping{
+			{
+				Name:    "nic0", // needed for Ubuntu
+				Network: network,
+			},
+			{
+				Name:    "VM Network", // needed for Bottlerocket
+				Network: network,
+			},
+		},
+	}
+
+	deployOpts, err := json.Marshal(deployOptsStruct)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling template deployment options: %v", err)
+	}
+
+	return deployOpts, err
+}
+
+// CreateUser creates a user.
+func (g *Govc) CreateUser(ctx context.Context, username string, password string) error {
+	params := []string{
+		"sso.user.create", "-p", password, username,
+	}
+
+	if _, err := g.exec(ctx, params...); err != nil {
+		return fmt.Errorf("govc returned error %v", err)
+	}
+	return nil
+}
+
+// UserExists checks if a user exists.
+func (g *Govc) UserExists(ctx context.Context, username string) (bool, error) {
+	params := []string{
+		"sso.user.ls",
+		username,
+	}
+
+	response, err := g.exec(ctx, params...)
+	if err != nil {
+		return false, err
+	}
+
+	return response.Len() > 0, nil
+}
+
+// CreateGroup creates a group.
+func (g *Govc) CreateGroup(ctx context.Context, name string) error {
+	params := []string{
+		"sso.group.create", name,
+	}
+
+	if _, err := g.exec(ctx, params...); err != nil {
+		return fmt.Errorf("govc returned error %v", err)
+	}
+
+	return nil
+}
+
+// GroupExists checks if a group exists.
+func (g *Govc) GroupExists(ctx context.Context, name string) (bool, error) {
+	params := []string{
+		"sso.group.ls",
+		name,
+	}
+
+	response, err := g.exec(ctx, params...)
+	if err != nil {
+		return false, err
+	}
+
+	return response.Len() > 0, nil
+}
+
+// AddUserToGroup adds a user to a group.
+func (g *Govc) AddUserToGroup(ctx context.Context, name string, username string) error {
+	params := []string{
+		"sso.group.update",
+		"-a", username,
+		name,
+	}
+	if _, err := g.exec(ctx, params...); err != nil {
+		return fmt.Errorf("govc returned error %v", err)
+	}
+
+	return nil
+}
+
+// RoleExists checks if a role exists.
+func (g *Govc) RoleExists(ctx context.Context, name string) (bool, error) {
+	params := []string{
+		"role.ls",
+		name,
+	}
+
+	_, err := g.exec(ctx, params...)
+	if err != nil && strings.Contains(err.Error(), fmt.Sprintf("role \"%s\" not found", name)) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// CreateRole creates a role with specified privileges.
+func (g *Govc) CreateRole(ctx context.Context, name string, privileges []string) error {
+	params := append([]string{"role.create", name}, privileges...)
+
+	if _, err := g.exec(ctx, params...); err != nil {
+		return fmt.Errorf("govc returned error %v", err)
+	}
+
+	return nil
+}
+
+// SetGroupRoleOnObject sets a role for a given group on target object.
+func (g *Govc) SetGroupRoleOnObject(ctx context.Context, principal string, role string, object string, domain string) error {
+	principal = principal + "@" + domain
+
+	params := []string{
+		"permissions.set",
+		"-group=true",
+		"-principal", principal,
+		"-role", role,
+		object,
+	}
+
+	if _, err := g.exec(ctx, params...); err != nil {
+		return fmt.Errorf("govc returned error %v", err)
+	}
+
 	return nil
 }

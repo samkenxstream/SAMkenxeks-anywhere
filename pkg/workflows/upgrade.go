@@ -3,9 +3,13 @@ package workflows
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/aws/eks-anywhere/pkg/cluster"
 	"github.com/aws/eks-anywhere/pkg/clustermarshaller"
+	"github.com/aws/eks-anywhere/pkg/constants"
+	"github.com/aws/eks-anywhere/pkg/features"
 	"github.com/aws/eks-anywhere/pkg/filewriter"
 	"github.com/aws/eks-anywhere/pkg/logger"
 	"github.com/aws/eks-anywhere/pkg/providers"
@@ -19,28 +23,35 @@ type Upgrade struct {
 	bootstrapper      interfaces.Bootstrapper
 	provider          providers.Provider
 	clusterManager    interfaces.ClusterManager
-	addonManager      interfaces.AddonManager
+	gitOpsManager     interfaces.GitOpsManager
 	writer            filewriter.FileWriter
 	capiManager       interfaces.CAPIManager
 	eksdInstaller     interfaces.EksdInstaller
 	eksdUpgrader      interfaces.EksdUpgrader
+	clusterUpgrader   interfaces.ClusterUpgrader
 	upgradeChangeDiff *types.ChangeDiff
 }
 
 func NewUpgrade(bootstrapper interfaces.Bootstrapper, provider providers.Provider,
 	capiManager interfaces.CAPIManager,
-	clusterManager interfaces.ClusterManager, addonManager interfaces.AddonManager, writer filewriter.FileWriter, eksdUpgrader interfaces.EksdUpgrader, eksdInstaller interfaces.EksdInstaller,
+	clusterManager interfaces.ClusterManager,
+	gitOpsManager interfaces.GitOpsManager,
+	writer filewriter.FileWriter,
+	eksdUpgrader interfaces.EksdUpgrader,
+	eksdInstaller interfaces.EksdInstaller,
+	clusterUpgrader interfaces.ClusterUpgrader,
 ) *Upgrade {
 	upgradeChangeDiff := types.NewChangeDiff()
 	return &Upgrade{
 		bootstrapper:      bootstrapper,
 		provider:          provider,
 		clusterManager:    clusterManager,
-		addonManager:      addonManager,
+		gitOpsManager:     gitOpsManager,
 		writer:            writer,
 		capiManager:       capiManager,
 		eksdUpgrader:      eksdUpgrader,
 		eksdInstaller:     eksdInstaller,
+		clusterUpgrader:   clusterUpgrader,
 		upgradeChangeDiff: upgradeChangeDiff,
 	}
 }
@@ -49,7 +60,7 @@ func (c *Upgrade) Run(ctx context.Context, clusterSpec *cluster.Spec, management
 	if forceCleanup {
 		if err := c.bootstrapper.DeleteBootstrapCluster(ctx, &types.Cluster{
 			Name: clusterSpec.Cluster.Name,
-		}, true); err != nil {
+		}, constants.Upgrade, forceCleanup); err != nil {
 			return err
 		}
 	}
@@ -58,7 +69,7 @@ func (c *Upgrade) Run(ctx context.Context, clusterSpec *cluster.Spec, management
 		Bootstrapper:      c.bootstrapper,
 		Provider:          c.provider,
 		ClusterManager:    c.clusterManager,
-		AddonManager:      c.addonManager,
+		GitOpsManager:     c.gitOpsManager,
 		ManagementCluster: managementCluster,
 		WorkloadCluster:   workloadCluster,
 		ClusterSpec:       clusterSpec,
@@ -67,10 +78,14 @@ func (c *Upgrade) Run(ctx context.Context, clusterSpec *cluster.Spec, management
 		CAPIManager:       c.capiManager,
 		EksdInstaller:     c.eksdInstaller,
 		EksdUpgrader:      c.eksdUpgrader,
+		ClusterUpgrader:   c.clusterUpgrader,
 		UpgradeChangeDiff: c.upgradeChangeDiff,
 	}
+	if features.IsActive(features.CheckpointEnabled()) {
+		return task.NewTaskRunner(&setupAndValidateTasks{}, c.writer, task.WithCheckpointFile()).RunTask(ctx, commandContext)
+	}
 
-	return task.NewTaskRunner(&setupAndValidateTasks{}).RunTask(ctx, commandContext)
+	return task.NewTaskRunner(&setupAndValidateTasks{}, c.writer).RunTask(ctx, commandContext)
 }
 
 type setupAndValidateTasks struct{}
@@ -79,21 +94,21 @@ type updateSecrets struct{}
 
 type ensureEtcdCAPIComponentsExistTask struct{}
 
-type upgradeCoreComponents struct{}
+type upgradeCoreComponents struct {
+	UpgradeChangeDiff *types.ChangeDiff
+}
 
 type upgradeNeeded struct{}
 
-type pauseEksaAndFluxReconcile struct{}
+type pauseEksaReconcile struct{}
 
-type createBootstrapClusterTask struct{}
+type createBootstrapClusterTask struct {
+	bootstrapCluster *types.Cluster
+}
 
 type installCAPITask struct{}
 
 type moveManagementToBootstrapTask struct{}
-
-type moveManagementToWorkloadTaskAndExit struct {
-	*moveManagementToWorkloadTask
-}
 
 type moveManagementToWorkloadTask struct{}
 
@@ -105,16 +120,28 @@ type deleteBootstrapClusterTask struct {
 
 type updateClusterAndGitResources struct{}
 
-type resumeFluxReconcile struct{}
+// reconcileClusterDefinitions updates all the places that have a cluster definition to follow the cluster config provided to this workflow:
+// the eks-a objects in the management cluster and the cluster config in the git repo if GitOps is enabled. It also resumes the eks-a controller
+// manager and GitOps reconciliations.
+type reconcileClusterDefinitions struct {
+	eksaSpecDiff bool
+}
 
 type writeClusterConfigTask struct{}
 
 func (s *setupAndValidateTasks) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
 	logger.Info("Performing setup and validations")
+	currentSpec, err := commandContext.ClusterManager.GetCurrentClusterSpec(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec.Cluster.Name)
+	if err != nil {
+		commandContext.SetError(err)
+		return nil
+	}
+	commandContext.CurrentClusterSpec = currentSpec
 	runner := validations.NewRunner()
-	runner.Register(s.validations(ctx, commandContext)...)
+	runner.Register(s.providerValidation(ctx, commandContext)...)
+	runner.Register(commandContext.Validations.PreflightValidations(ctx)...)
 
-	err := runner.Run()
+	err = runner.Run()
 	if err != nil {
 		commandContext.SetError(err)
 		return nil
@@ -123,18 +150,12 @@ func (s *setupAndValidateTasks) Run(ctx context.Context, commandContext *task.Co
 	return &updateSecrets{}
 }
 
-func (s *setupAndValidateTasks) validations(ctx context.Context, commandContext *task.CommandContext) []validations.Validation {
+func (s *setupAndValidateTasks) providerValidation(ctx context.Context, commandContext *task.CommandContext) []validations.Validation {
 	return []validations.Validation{
 		func() *validations.ValidationResult {
 			return &validations.ValidationResult{
-				Name: fmt.Sprintf("%s Provider setup is valid", commandContext.Provider.Name()),
-				Err:  commandContext.Provider.SetupAndValidateUpgradeCluster(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec),
-			}
-		},
-		func() *validations.ValidationResult {
-			return &validations.ValidationResult{
-				Name: "upgrade preflight validations pass",
-				Err:  commandContext.Validations.PreflightValidations(ctx),
+				Name: fmt.Sprintf("%s provider validation", commandContext.Provider.Name()),
+				Err:  commandContext.Provider.SetupAndValidateUpgradeCluster(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec, commandContext.CurrentClusterSpec),
 			}
 		},
 	}
@@ -144,8 +165,29 @@ func (s *setupAndValidateTasks) Name() string {
 	return "setup-and-validate"
 }
 
+func (s *setupAndValidateTasks) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	if err := commandContext.Provider.SetupAndValidateUpgradeCluster(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec, commandContext.CurrentClusterSpec); err != nil {
+		commandContext.SetError(err)
+		return nil, err
+	}
+	logger.Info(fmt.Sprintf("%s Provider setup is valid", commandContext.Provider.Name()))
+	currentSpec, err := commandContext.ClusterManager.GetCurrentClusterSpec(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec.Cluster.Name)
+	if err != nil {
+		commandContext.SetError(err)
+		return nil, err
+	}
+	commandContext.CurrentClusterSpec = currentSpec
+	return &updateSecrets{}, nil
+}
+
+func (s *setupAndValidateTasks) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
 func (s *updateSecrets) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
-	err := commandContext.Provider.UpdateSecrets(ctx, commandContext.ManagementCluster)
+	err := commandContext.Provider.UpdateSecrets(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec)
 	if err != nil {
 		commandContext.SetError(err)
 		return &CollectDiagnosticsTask{}
@@ -157,27 +199,51 @@ func (s *updateSecrets) Name() string {
 	return "update-secrets"
 }
 
+func (s *updateSecrets) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
+func (s *updateSecrets) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	return &ensureEtcdCAPIComponentsExistTask{}, nil
+}
+
 func (s *ensureEtcdCAPIComponentsExistTask) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
 	logger.Info("Ensuring etcd CAPI providers exist on management cluster before upgrade")
-	currentSpec, err := commandContext.ClusterManager.GetCurrentClusterSpec(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec.Cluster.Name)
-	if err != nil {
-		commandContext.SetError(err)
-		return &CollectDiagnosticsTask{}
-	}
-	commandContext.CurrentClusterSpec = currentSpec
-	if err := commandContext.CAPIManager.EnsureEtcdProvidersInstallation(ctx, commandContext.ManagementCluster, commandContext.Provider, currentSpec); err != nil {
+	if err := commandContext.CAPIManager.EnsureEtcdProvidersInstallation(ctx, commandContext.ManagementCluster, commandContext.Provider, commandContext.CurrentClusterSpec); err != nil {
 		commandContext.SetError(err)
 		return nil
 	}
-	return &upgradeCoreComponents{}
+	return &pauseEksaReconcile{}
 }
 
 func (s *ensureEtcdCAPIComponentsExistTask) Name() string {
 	return "ensure-etcd-capi-components-exist"
 }
 
+func (s *ensureEtcdCAPIComponentsExistTask) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
+func (s *ensureEtcdCAPIComponentsExistTask) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	return &pauseEksaReconcile{}, nil
+}
+
 func (s *upgradeCoreComponents) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
 	logger.Info("Upgrading core components")
+
+	err := commandContext.Provider.PreCoreComponentsUpgrade(
+		ctx,
+		commandContext.ManagementCluster,
+		commandContext.ClusterSpec,
+	)
+	if err != nil {
+		commandContext.SetError(err)
+		return &CollectDiagnosticsTask{}
+	}
 
 	changeDiff, err := commandContext.ClusterManager.UpgradeNetworking(ctx, commandContext.WorkloadCluster, commandContext.CurrentClusterSpec, commandContext.ClusterSpec, commandContext.Provider)
 	if err != nil {
@@ -193,13 +259,12 @@ func (s *upgradeCoreComponents) Run(ctx context.Context, commandContext *task.Co
 	}
 	commandContext.UpgradeChangeDiff.Append(changeDiff)
 
-	err = commandContext.AddonManager.UpdateLegacyFileStructure(ctx, commandContext.CurrentClusterSpec, commandContext.ClusterSpec)
-	if err != nil {
+	if err = commandContext.GitOpsManager.Install(ctx, commandContext.ManagementCluster, commandContext.CurrentClusterSpec, commandContext.ClusterSpec); err != nil {
 		commandContext.SetError(err)
 		return &CollectDiagnosticsTask{}
 	}
 
-	changeDiff, err = commandContext.AddonManager.Upgrade(ctx, commandContext.ManagementCluster, commandContext.CurrentClusterSpec, commandContext.ClusterSpec)
+	changeDiff, err = commandContext.GitOpsManager.Upgrade(ctx, commandContext.ManagementCluster, commandContext.CurrentClusterSpec, commandContext.ClusterSpec)
 	if err != nil {
 		commandContext.SetError(err)
 		return &CollectDiagnosticsTask{}
@@ -219,12 +284,28 @@ func (s *upgradeCoreComponents) Run(ctx context.Context, commandContext *task.Co
 		return &CollectDiagnosticsTask{}
 	}
 	commandContext.UpgradeChangeDiff.Append(changeDiff)
+	s.UpgradeChangeDiff = commandContext.UpgradeChangeDiff
 
 	return &upgradeNeeded{}
 }
 
 func (s *upgradeCoreComponents) Name() string {
 	return "upgrade-core-components"
+}
+
+func (s *upgradeCoreComponents) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: s.UpgradeChangeDiff,
+	}
+}
+
+func (s *upgradeCoreComponents) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	s.UpgradeChangeDiff = &types.ChangeDiff{}
+	if err := task.UnmarshalTaskCheckpoint(completedTask.Checkpoint, s.UpgradeChangeDiff); err != nil {
+		return nil, err
+	}
+	commandContext.UpgradeChangeDiff = s.UpgradeChangeDiff
+	return &upgradeNeeded{}, nil
 }
 
 func (s *upgradeNeeded) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
@@ -235,7 +316,7 @@ func (s *upgradeNeeded) Run(ctx context.Context, commandContext *task.CommandCon
 		return nil
 	} else if upgradeNeeded {
 		logger.V(3).Info("Provider needs a cluster upgrade")
-		return &pauseEksaAndFluxReconcile{}
+		return &createBootstrapClusterTask{}
 	}
 	diff, err := commandContext.ClusterManager.EKSAClusterSpecChanged(ctx, commandContext.ManagementCluster, newSpec)
 	if err != nil {
@@ -245,17 +326,27 @@ func (s *upgradeNeeded) Run(ctx context.Context, commandContext *task.CommandCon
 
 	if !diff {
 		logger.Info("No upgrades needed from cluster spec")
-		return nil
+		return &reconcileClusterDefinitions{eksaSpecDiff: false}
 	}
 
-	return &pauseEksaAndFluxReconcile{}
+	return &createBootstrapClusterTask{}
 }
 
 func (s *upgradeNeeded) Name() string {
 	return "upgrade-needed"
 }
 
-func (s *pauseEksaAndFluxReconcile) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
+func (s *upgradeNeeded) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
+func (s *upgradeNeeded) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	return &createBootstrapClusterTask{}, nil
+}
+
+func (s *pauseEksaReconcile) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
 	logger.Info("Pausing EKS-A cluster controller reconcile")
 	err := commandContext.ClusterManager.PauseEKSAControllerReconcile(ctx, commandContext.ManagementCluster, commandContext.CurrentClusterSpec, commandContext.Provider)
 	if err != nil {
@@ -263,17 +354,28 @@ func (s *pauseEksaAndFluxReconcile) Run(ctx context.Context, commandContext *tas
 		return &CollectDiagnosticsTask{}
 	}
 
-	logger.Info("Pausing Flux kustomization")
-	err = commandContext.AddonManager.PauseGitOpsKustomization(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec)
+	logger.Info("Pausing GitOps cluster resources reconcile")
+	err = commandContext.GitOpsManager.PauseClusterResourcesReconcile(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec, commandContext.Provider)
 	if err != nil {
 		commandContext.SetError(err)
 		return &CollectDiagnosticsTask{}
 	}
-	return &createBootstrapClusterTask{}
+
+	return &upgradeCoreComponents{}
 }
 
-func (s *pauseEksaAndFluxReconcile) Name() string {
+func (s *pauseEksaReconcile) Name() string {
 	return "pause-controllers-reconcile"
+}
+
+func (s *pauseEksaReconcile) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
+func (s *pauseEksaReconcile) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	return &upgradeCoreComponents{}, nil
 }
 
 func (s *createBootstrapClusterTask) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
@@ -281,7 +383,7 @@ func (s *createBootstrapClusterTask) Run(ctx context.Context, commandContext *ta
 		return &upgradeWorkloadClusterTask{}
 	}
 	logger.Info("Creating bootstrap cluster")
-	bootstrapOptions, err := commandContext.Provider.BootstrapClusterOpts()
+	bootstrapOptions, err := commandContext.Provider.BootstrapClusterOpts(commandContext.ClusterSpec)
 	if err != nil {
 		commandContext.SetError(err)
 		return nil
@@ -294,6 +396,19 @@ func (s *createBootstrapClusterTask) Run(ctx context.Context, commandContext *ta
 		return &deleteBootstrapClusterTask{}
 	}
 
+	logger.Info("Provider specific pre-capi-install-setup on bootstrap cluster")
+	if err = commandContext.Provider.PreCAPIInstallOnBootstrap(ctx, bootstrapCluster, commandContext.ClusterSpec); err != nil {
+		commandContext.SetError(err)
+		return &CollectMgmtClusterDiagnosticsTask{}
+	}
+
+	logger.Info("Provider specific post-setup")
+	if err = commandContext.Provider.PostBootstrapSetupUpgrade(ctx, commandContext.ClusterSpec.Cluster, bootstrapCluster); err != nil {
+		commandContext.SetError(err)
+		return &CollectMgmtClusterDiagnosticsTask{}
+	}
+	s.bootstrapCluster = bootstrapCluster
+
 	return &installCAPITask{}
 }
 
@@ -301,12 +416,30 @@ func (s *createBootstrapClusterTask) Name() string {
 	return "bootstrap-cluster-init"
 }
 
+func (s *createBootstrapClusterTask) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: s.bootstrapCluster,
+	}
+}
+
+func (s *createBootstrapClusterTask) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	s.bootstrapCluster = &types.Cluster{}
+	if err := task.UnmarshalTaskCheckpoint(completedTask.Checkpoint, s.bootstrapCluster); err != nil {
+		return nil, err
+	}
+	commandContext.BootstrapCluster = s.bootstrapCluster
+	if commandContext.ManagementCluster != nil && commandContext.ManagementCluster.ExistingManagement {
+		return &upgradeWorkloadClusterTask{}, nil
+	}
+	return &installCAPITask{}, nil
+}
+
 func (s *installCAPITask) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
 	logger.Info("Installing cluster-api providers on bootstrap cluster")
 	err := commandContext.ClusterManager.InstallCAPI(ctx, commandContext.ClusterSpec, commandContext.BootstrapCluster, commandContext.Provider)
 	if err != nil {
 		commandContext.SetError(err)
-		return &deleteBootstrapClusterTask{}
+		return &CollectMgmtClusterDiagnosticsTask{}
 	}
 	return &moveManagementToBootstrapTask{}
 }
@@ -315,13 +448,38 @@ func (s *installCAPITask) Name() string {
 	return "install-capi"
 }
 
+func (s *installCAPITask) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
+func (s *installCAPITask) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	return &moveManagementToBootstrapTask{}, nil
+}
+
 func (s *moveManagementToBootstrapTask) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
-	logger.Info("Moving cluster management from workload to bootstrap cluster")
-	err := commandContext.ClusterManager.MoveCAPI(ctx, commandContext.WorkloadCluster, commandContext.BootstrapCluster, commandContext.WorkloadCluster.Name, commandContext.ClusterSpec, types.WithNodeRef(), types.WithNodeHealthy())
+	logger.Info("Backing up workload cluster's management resources before moving to bootstrap cluster")
+	err := commandContext.ClusterManager.BackupCAPI(ctx, commandContext.WorkloadCluster, commandContext.ManagementClusterStateDir)
 	if err != nil {
 		commandContext.SetError(err)
 		return &CollectDiagnosticsTask{}
 	}
+
+	logger.Info("Moving cluster management from workload to bootstrap cluster")
+	err = commandContext.ClusterManager.MoveCAPI(ctx, commandContext.WorkloadCluster, commandContext.BootstrapCluster, commandContext.WorkloadCluster.Name, commandContext.ClusterSpec, types.WithNodeRef(), types.WithNodeHealthy())
+	if err != nil {
+		commandContext.SetError(err)
+		return &CollectDiagnosticsTask{}
+	}
+
+	logger.V(3).Info("Provider specific post management move")
+	err = commandContext.Provider.PostMoveManagementToBootstrap(ctx, commandContext.BootstrapCluster)
+	if err != nil {
+		commandContext.SetError(err)
+		return &CollectDiagnosticsTask{}
+	}
+
 	commandContext.ManagementCluster = commandContext.BootstrapCluster
 	return &upgradeWorkloadClusterTask{}
 }
@@ -330,20 +488,48 @@ func (s *moveManagementToBootstrapTask) Name() string {
 	return "capi-management-move-to-bootstrap"
 }
 
+func (s *moveManagementToBootstrapTask) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
+func (s *moveManagementToBootstrapTask) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	commandContext.ManagementCluster = commandContext.BootstrapCluster
+	return &upgradeWorkloadClusterTask{}, nil
+}
+
 func (s *upgradeWorkloadClusterTask) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
 	eksaManagementCluster := commandContext.WorkloadCluster
 	if commandContext.ManagementCluster != nil && commandContext.ManagementCluster.ExistingManagement {
 		eksaManagementCluster = commandContext.ManagementCluster
 	}
 
+	if err := commandContext.ClusterUpgrader.PrepareUpgrade(
+		ctx,
+		commandContext.ClusterSpec,
+		commandContext.ManagementCluster.KubeconfigFile,
+		commandContext.WorkloadCluster.KubeconfigFile,
+	); err != nil {
+		commandContext.SetError(err)
+		return &CollectDiagnosticsTask{}
+	}
+
 	logger.Info("Upgrading workload cluster")
 	err := commandContext.ClusterManager.UpgradeCluster(ctx, commandContext.ManagementCluster, commandContext.WorkloadCluster, commandContext.ClusterSpec, commandContext.Provider)
 	if err != nil {
 		commandContext.SetError(err)
-		if commandContext.ManagementCluster.ExistingManagement {
-			return &CollectDiagnosticsTask{}
-		}
-		return &moveManagementToWorkloadTaskAndExit{}
+		return &CollectDiagnosticsTask{}
+	}
+
+	if err := commandContext.ClusterUpgrader.CleanupAfterUpgrade(
+		ctx,
+		commandContext.ClusterSpec,
+		commandContext.ManagementCluster.KubeconfigFile,
+		commandContext.WorkloadCluster.KubeconfigFile,
+	); err != nil {
+		commandContext.SetError(err)
+		return &CollectDiagnosticsTask{}
 	}
 
 	if commandContext.UpgradeChangeDiff.Changed() {
@@ -360,9 +546,19 @@ func (s *upgradeWorkloadClusterTask) Name() string {
 	return "upgrade-workload-cluster"
 }
 
+func (s *upgradeWorkloadClusterTask) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
+func (s *upgradeWorkloadClusterTask) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	return &moveManagementToWorkloadTask{}, nil
+}
+
 func (s *moveManagementToWorkloadTask) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
 	if commandContext.ManagementCluster.ExistingManagement {
-		return &updateClusterAndGitResources{}
+		return &reconcileClusterDefinitions{eksaSpecDiff: true}
 	}
 	logger.Info("Moving cluster management from bootstrap to workload cluster")
 	err := commandContext.ClusterManager.MoveCAPI(ctx, commandContext.BootstrapCluster, commandContext.WorkloadCluster, commandContext.WorkloadCluster.Name, commandContext.ClusterSpec, types.WithNodeRef(), types.WithNodeHealthy())
@@ -371,20 +567,28 @@ func (s *moveManagementToWorkloadTask) Run(ctx context.Context, commandContext *
 		return &CollectDiagnosticsTask{}
 	}
 	commandContext.ManagementCluster = commandContext.WorkloadCluster
-	return &updateClusterAndGitResources{}
-}
-
-func (s *moveManagementToWorkloadTaskAndExit) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
-	_ = s.moveManagementToWorkloadTask.Run(ctx, commandContext)
-	return &CollectDiagnosticsTask{}
+	return &reconcileClusterDefinitions{eksaSpecDiff: true}
 }
 
 func (s *moveManagementToWorkloadTask) Name() string {
 	return "capi-management-move-to-workload"
 }
 
-func (s *updateClusterAndGitResources) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
-	logger.Info("Applying new EKS-A cluster resource; resuming reconcile")
+func (s *moveManagementToWorkloadTask) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
+func (s *moveManagementToWorkloadTask) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	if !commandContext.ManagementCluster.ExistingManagement {
+		commandContext.ManagementCluster = commandContext.WorkloadCluster
+	}
+	return &reconcileClusterDefinitions{eksaSpecDiff: true}, nil
+}
+
+func (s *reconcileClusterDefinitions) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
+	logger.Info("Updating EKS-A cluster resource")
 	datacenterConfig := commandContext.Provider.DatacenterConfig(commandContext.ClusterSpec)
 	machineConfigs := commandContext.Provider.MachineConfigs(commandContext.ClusterSpec)
 	err := commandContext.ClusterManager.CreateEKSAResources(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec, datacenterConfig, machineConfigs)
@@ -398,7 +602,7 @@ func (s *updateClusterAndGitResources) Run(ctx context.Context, commandContext *
 		return &CollectDiagnosticsTask{}
 	}
 
-	logger.Info("Resuming EKS-A controller reconciliation")
+	logger.Info("Resuming EKS-A controller reconcile")
 	err = commandContext.ClusterManager.ResumeEKSAControllerReconcile(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec, commandContext.Provider)
 	if err != nil {
 		commandContext.SetError(err)
@@ -406,37 +610,43 @@ func (s *updateClusterAndGitResources) Run(ctx context.Context, commandContext *
 	}
 
 	logger.Info("Updating Git Repo with new EKS-A cluster spec")
-	err = commandContext.AddonManager.UpdateGitEksaSpec(ctx, commandContext.ClusterSpec, datacenterConfig, machineConfigs)
+	err = commandContext.GitOpsManager.UpdateGitEksaSpec(ctx, commandContext.ClusterSpec, datacenterConfig, machineConfigs)
 	if err != nil {
 		commandContext.SetError(err)
 		return &CollectDiagnosticsTask{}
 	}
-	return &resumeFluxReconcile{}
-}
 
-func (s *updateClusterAndGitResources) Name() string {
-	return "update-resources"
-}
-
-func (s *resumeFluxReconcile) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
 	logger.Info("Forcing reconcile Git repo with latest commit")
-	err := commandContext.AddonManager.ForceReconcileGitRepo(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec)
+	err = commandContext.GitOpsManager.ForceReconcileGitRepo(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec)
 	if err != nil {
 		commandContext.SetError(err)
 		return &CollectDiagnosticsTask{}
 	}
 
-	logger.Info("Resuming Flux kustomization")
-	err = commandContext.AddonManager.ResumeGitOpsKustomization(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec)
+	logger.Info("Resuming GitOps cluster resources kustomization")
+	err = commandContext.GitOpsManager.ResumeClusterResourcesReconcile(ctx, commandContext.ManagementCluster, commandContext.ClusterSpec, commandContext.Provider)
 	if err != nil {
 		commandContext.SetError(err)
 		return &writeClusterConfigTask{}
 	}
+	if !s.eksaSpecDiff {
+		return nil
+	}
 	return &writeClusterConfigTask{}
 }
 
-func (s *resumeFluxReconcile) Name() string {
-	return "resume-flux-kustomization"
+func (s *reconcileClusterDefinitions) Name() string {
+	return "resume-eksa-and-gitops-kustomization"
+}
+
+func (s *reconcileClusterDefinitions) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
+func (s *reconcileClusterDefinitions) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	return &writeClusterConfigTask{}, nil
 }
 
 func (s *writeClusterConfigTask) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
@@ -452,17 +662,38 @@ func (s *writeClusterConfigTask) Name() string {
 	return "write-cluster-config"
 }
 
+func (s *writeClusterConfigTask) Checkpoint() *task.CompletedTask {
+	return &task.CompletedTask{
+		Checkpoint: nil,
+	}
+}
+
+func (s *writeClusterConfigTask) Restore(ctx context.Context, commandContext *task.CommandContext, completedTask *task.CompletedTask) (task.Task, error) {
+	return &deleteBootstrapClusterTask{}, nil
+}
+
 func (s *deleteBootstrapClusterTask) Run(ctx context.Context, commandContext *task.CommandContext) task.Task {
 	if commandContext.OriginalError != nil {
 		c := CollectDiagnosticsTask{}
 		c.Run(ctx, commandContext)
 	}
 	if commandContext.BootstrapCluster != nil && !commandContext.BootstrapCluster.ExistingManagement {
-		if err := commandContext.Bootstrapper.DeleteBootstrapCluster(ctx, commandContext.BootstrapCluster, true); err != nil {
+		if err := commandContext.Bootstrapper.DeleteBootstrapCluster(ctx, commandContext.BootstrapCluster, constants.Upgrade, false); err != nil {
 			commandContext.SetError(err)
 		}
+
 		if commandContext.OriginalError == nil {
 			logger.MarkSuccess("Cluster upgraded!")
+		}
+		if err := commandContext.Provider.PostBootstrapDeleteForUpgrade(ctx); err != nil {
+			// Cluster has been succesfully upgraded, bootstrap cluster successfully deleted
+			// We don't necessarily need to return with an error here and abort
+			logger.Info(fmt.Sprintf("%v", err))
+		}
+
+		capiObjectFile := filepath.Join(commandContext.BootstrapCluster.Name, commandContext.ManagementClusterStateDir)
+		if err := os.RemoveAll(capiObjectFile); err != nil {
+			logger.Info(fmt.Sprintf("management cluster CAPI backup file not found: %v", err))
 		}
 		return nil
 	}

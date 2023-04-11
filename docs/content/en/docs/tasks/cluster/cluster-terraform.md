@@ -7,6 +7,9 @@ description: >
   Use Terraform to manage EKS Anywhere Clusters
 ---
 
+>**_NOTE_**: Support for using Terraform to manage and modify an EKS Anywhere cluster is available for vSphere, Snow, Bare metal and Nutanix clusters, but not yet for CloudStack clusters.
+>
+
 ## Using Terraform to manage an EKS Anywhere Cluster (Optional)
 This guide explains how you can use Terraform to manage and modify an EKS Anywhere cluster. 
 The guide is meant for illustrative purposes and is not a definitive approach to building production systems with Terraform and EKS Anywhere.
@@ -70,7 +73,7 @@ how to scale your EKS Anywhere worker nodes using the Terraform Kubernetes provi
      force_conflicts = true
    }
    ```
-    - Add the `namespace` `default` to the `metadata` of the cluster
+    - Add the `namespace` to the `metadata` of the cluster
     - Remove the `generation` field from the `metadata` of the cluster
     - Your Terraform cluster resource should look similar to this:
     ```bash
@@ -111,6 +114,97 @@ how to scale your EKS Anywhere worker nodes using the Terraform Kubernetes provi
 7. Observe the change to your cluster. For example:
    ```bash
    kubectl get nodes
+   ```
+
+## Manage separate workload clusters using Terraform
+
+Follow these steps if you want to use your initial cluster to create and manage separate workload clusters via Terraform.
+
+> **NOTE**: If you choose to manage your cluster using Terraform, do not use `kubectl` to edit your cluster objects as this can lead to field manager conflicts.
+
+### Prerequisites
+- An existing EKS Anywhere cluster imported into Terraform state.
+  If your existing cluster is not yet imported, see this [guide.]({{< relref "#guide" >}}).
+- A cluster configuration file for your new workload cluster.
+  
+### Create cluster using Terraform
+
+1. Create the new cluster configuration Terraform file. 
+   ```bash
+      tfk8s -f new-workload-cluster.yaml -o new-workload-cluster.tf
+   ```
+
+   > **NOTE**: Specify the `namespace` for all EKS Anywhere objects when you are using Terraform to manage your clusters (even for the `default` namespace, use `"namespace" = "default"` on those objects).
+   > 
+   > Ensure workload cluster object names are distinct from management cluster object names. Be sure to set the `managementCluster` field to identify the name of the management cluster.
+   
+2. Ensure that this new Terraform workload cluster configuration exists in the same directory as the management cluster Terraform files.
+      ```
+      my/terraform/config/path
+      ├── management-cluster.tf
+      ├── new-workload-cluster.tf
+      ├── provider.tf
+      ├──  ... 
+      └──
+      ```
+
+3. Verify the changes to be applied:
+   ```bash
+   terraform plan
+   ```
+
+4. If the plan looks as expected, apply those changes to create the new cluster resources:
+   ```bash
+   terraform apply
+   ```
+   
+5.  You can list the workload clusters managed by the management cluster.
+      ```bash
+      export KUBECONFIG=${PWD}/${MGMT_CLUSTER_NAME}/${MGMT_CLUSTER_NAME}-eks-a-cluster.kubeconfig
+      kubectl get clusters
+      ```
+
+6. The kubeconfig for your new cluster is stored as a secret on the management cluster.
+   You can get the workload cluster credentials and run the test application on your new workload cluster as follows:
+   ```bash
+   kubectl get secret -n eksa-system w01-kubeconfig -o jsonpath='{.data.value}' | base64 --decode > w01.kubeconfig
+   export KUBECONFIG=w01.kubeconfig
+   kubectl apply -f "https://anywhere.eks.amazonaws.com/manifests/hello-eks-a.yaml"
+   ```
+   
+### Upgrade cluster using Terraform
+   
+1. To upgrade a workload cluster using Terraform, modify the desired fields in the Terraform resource file.
+   As an example, to upgrade a cluster with version 1.24 to 1.25 you would modify your Terraform cluster resource:
+   ```bash
+    manifest = {
+      "apiVersion" = "anywhere.eks.amazonaws.com/v1alpha1"
+      "kind" = "Cluster"
+      "metadata" = {
+        "name" = "MyClusterName"
+        "namespace" = "default"
+      }
+      "spec" = {
+        "kubernetesVersion" = "1.25"
+         ...
+         ...
+      }
+    ```
+   >**_NOTE:_** If you have a custom machine image for your nodes you may also need to update your MachineConfig with a new `template`.
+   
+2. Apply those changes:
+   ```bash
+   terraform apply
+   ```
+
+For a comprehensive list of upgradeable fields for VSphere, Snow, and Nutanix, see the [upgradeable attributes section]({{< relref "./cluster-upgrades/vsphere-and-cloudstack-upgrades.md#upgradeable-cluster-attributes" >}}).
+ 
+### Delete cluster using Terraform
+
+1. To delete a workload cluster using Terraform, you will need the name of the Terraform cluster resource.
+   This can be found on the first line of your cluster resource definition.
+   ```bash
+   terraform destroy --target kubernetes_manifest.cluster_w01
    ```
 
 ### Appendix

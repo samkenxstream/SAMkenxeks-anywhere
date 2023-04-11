@@ -1,7 +1,15 @@
 # Developer
 
-[Development Best Practice Guidlines](best-practice.md)
+[Development Best Practice Guidelines](best-practice.md)
 
-[Pull Request Guidelines](pull-request.md)
+[Development Lifecycle](development-lifecycle.md)
+
+[Pull Request Guidelines](pull-requests.md)
 
 [Issue Management](issues.md)
+
+[Go Version](go-version.md)
+
+[Local Quickstart](local-quickstart.md)
+
+[Releases](releases.md)

@@ -218,10 +218,11 @@ func (g *GitClient) Branch(name string) error {
 		Name:   name,
 		Remote: gogit.DefaultRemoteName,
 		Merge:  localBranchRef,
+		Rebase: "true",
 	}
 
 	err = g.Client.CreateBranch(r, branchOpts)
-	branchExistsLocally := errors.As(err, &gogit.ErrBranchExists)
+	branchExistsLocally := errors.Is(err, gogit.ErrBranchExists)
 
 	if err != nil && !branchExistsLocally {
 		return fmt.Errorf("creating branch %s: %v", name, err)
@@ -416,7 +417,7 @@ func (gg *goGit) CreateBranch(repo *gogit.Repository, config *config.Branch) err
 func (gg *goGit) ListRemotes(r *gogit.Repository, auth transport.AuthMethod) ([]*plumbing.Reference, error) {
 	remote, err := r.Remote(gogit.DefaultRemoteName)
 	if err != nil {
-		if errors.As(err, &gogit.ErrRemoteNotFound) {
+		if errors.Is(err, gogit.ErrRemoteNotFound) {
 			return []*plumbing.Reference{}, nil
 		}
 		return nil, err
